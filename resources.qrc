@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/styles">
+        <file alias="MainWindowStyles.css">Resources/Styles/MainWindow.css</file>
+    </qresource>
+    <qresource prefix="/images">
+        <file alias="test.gif">Test.gif</file>
+    </qresource>
+</RCC>
