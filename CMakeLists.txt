@@ -15,17 +15,18 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
 set(PROJECT_SOURCES
-        main.cpp
-        mainWindow.cpp
-        mainWindow.h
-        styleSheetUtility.h
-        filesListModel.h
-        filesListModel.cpp
-        file.h
-        file.cpp
+        src/main/main.cpp
+        src/main/mainWindow.cpp
+        src/main/mainWindow.h
+        src/utility/styleSheetUtility.h
+        src/model/filesListModel.h
+        src/model/filesListModel.cpp
+        src/model/file.h
+        src/model/file.cpp
 )
 
 add_executable(TgGifToEmoji ${PROJECT_SOURCES} resources.qrc)
+target_include_directories(TgGifToEmoji PRIVATE "src")
 
 target_link_libraries(TgGifToEmoji PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 

@@ -1,6 +1,6 @@
 #include "mainWindow.h"
-#include "filesListModel.h"
-#include "styleSheetUtility.h"
+
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLayout>
@@ -11,27 +11,45 @@
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
+#include "model/filesListModel.h"
+#include "utility/styleSheetUtility.h"
+
 namespace {
 constexpr auto windowStyle = ":/styles/MainWindowStyles.css";
 constexpr QSize WindowSizeHint(800, 600);
 constexpr auto testGif = ":/images/test.gif";
 constexpr auto convertButtonText = "Convert";
-} // namespace
+constexpr auto selectPathButtonText = "Select path";
+}  // namespace
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setStyleSheet(loadStyleSheet(windowStyle));
 
-  auto *central = new QWidget();
+  auto* central = new QWidget();
 
-  auto *mainLayout = new QHBoxLayout();
-  auto *gifLayout = new QVBoxLayout();
-  auto *operationLayout = new QVBoxLayout();
+  auto* mainLayout = new QHBoxLayout();
+  auto* gifLayout = new QVBoxLayout();
+  auto* operationLayout = new QVBoxLayout();
 
-  auto *operationWidget = new QWidget();
-  auto *convertButton = new QPushButton(convertButtonText, operationWidget);
+  auto* operationWidget = new QWidget();
+  auto* convertButton = new QPushButton(convertButtonText, operationWidget);
+  auto* outPathLabel = new QLabel(operationWidget);
+  auto* selectPathButton =
+      new QPushButton(selectPathButtonText, operationWidget);
+
+  QObject::connect(
+      selectPathButton, &QPushButton::clicked, outPathLabel,
+      [outPathLabel, this]() {
+        outPathLabel->setText(QFileDialog::getExistingDirectory(this));
+      });
+
   convertButton->setMinimumSize(200, 50);
+  outPathLabel->setMinimumSize(200, 50);
+  selectPathButton->setMinimumSize(200, 50);
   operationWidget->setMinimumSize(400, 300);
   operationLayout->addWidget(operationWidget);
+  operationLayout->addWidget(outPathLabel);
+  operationLayout->addWidget(selectPathButton);
 
   files = new QListView(this);
   files->setModel(new FilesListModel());
@@ -44,8 +62,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   central->setLayout(mainLayout);
   setCentralWidget(central);
 
-  auto *labelGif = new QLabel(this);
-  auto *gif = new QMovie(testGif);
+  auto* labelGif = new QLabel(this);
+  auto* gif = new QMovie(testGif);
   labelGif->setMovie(gif);
   gif->start();
 
@@ -60,4 +78,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
 MainWindow::~MainWindow() {}
 
-QSize MainWindow::sizeHint() const { return WindowSizeHint; }
+QSize MainWindow::sizeHint() const {
+  return WindowSizeHint;
+}
