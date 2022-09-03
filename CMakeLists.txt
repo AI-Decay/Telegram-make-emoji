@@ -19,6 +19,10 @@ set(PROJECT_SOURCES
         mainWindow.cpp
         mainWindow.h
         styleSheetUtility.h
+        filesListModel.h
+        filesListModel.cpp
+        file.h
+        file.cpp
 )
 
 add_executable(TgGifToEmoji ${PROJECT_SOURCES} resources.qrc)
