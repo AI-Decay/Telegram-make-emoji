@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
-set(FFmmpeg_PATH "E:/Libs/vcpkg/packages/ffmpeg_x64-windows")
+set(FFmmpeg_PATH "E:/Libs/FFmpeg")
 set(FFmmpeg_INCLUDE "${FFmmpeg_PATH}/include")
-set(FFmmpeg_LIB "${FFmmpeg_PATH}/lib")
+set(FFmmpeg_LIB "${FFmmpeg_PATH}/bin")
 
 project(TgGifToEmoji VERSION 0.1 LANGUAGES CXX)
 

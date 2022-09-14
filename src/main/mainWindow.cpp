@@ -11,6 +11,7 @@
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
+#include "converter/videoToGifConverter.h"
 #include "model/filesListModel.h"
 #include "utility/styleSheetUtility.h"
 
@@ -24,6 +25,10 @@ constexpr auto selectPathButtonText = "Select path";
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setStyleSheet(loadStyleSheet(windowStyle));
+
+  VideoToGifConverter conv;
+  conv.convert("C:/Users/Pavel/Desktop/tmp/485.mp4",
+               "C:/Users/Pavel/Desktop/tmp/485.webm");
 
   auto* central = new QWidget();
 
