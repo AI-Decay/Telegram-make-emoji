@@ -26,10 +26,7 @@ constexpr auto selectPathButtonText = "Select path";
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setStyleSheet(loadStyleSheet(windowStyle));
 
-  VideoToGifConverter conv;
-  conv.convert("C:/Users/Pavel/Desktop/tmp/485.mp4",
-               "C:/Users/Pavel/Desktop/tmp/485.webm");
-
+  convertor = new VideoToGifConverter(this);
   auto* central = new QWidget();
 
   auto* mainLayout = new QHBoxLayout();
@@ -46,6 +43,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
       selectPathButton, &QPushButton::clicked, outPathLabel,
       [outPathLabel, this]() {
         outPathLabel->setText(QFileDialog::getExistingDirectory(this));
+      });
+
+  QObject::connect(
+      convertButton, &QPushButton::clicked, outPathLabel,
+      [outPathLabel, this]() {
+        std::vector<VideoProp> vector;
+        const auto selected = files->selectionModel()->selectedIndexes();
+        for (auto item : selected) {
+          vector.push_back({item.data(Qt::DisplayRole).toString(), 0, 3});
+        }
+
+        convertor->push(outPathLabel->text(), std::move(vector));
       });
 
   convertButton->setMinimumSize(200, 50);

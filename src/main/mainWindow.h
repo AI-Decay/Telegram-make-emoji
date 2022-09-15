@@ -4,16 +4,18 @@
 #include <QMainWindow>
 
 class QListView;
+class VideoToGifConverter;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
 
-public:
-  MainWindow(QWidget *parent = nullptr);
+ public:
+  MainWindow(QWidget* parent = nullptr);
   ~MainWindow();
   QSize sizeHint() const override;
 
-private:
-  QListView *files;
+ private:
+  QListView* files;
+  VideoToGifConverter* convertor;
 };
-#endif // MAINWINDOW_H
+#endif  // MAINWINDOW_H
