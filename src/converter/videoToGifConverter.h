@@ -11,8 +11,8 @@ class QStringList;
 struct VideoProp {
   QUuid uuid;
   QString path;
-  int beginPosMs = 0;
-  int endPosMs = 0;
+  int64_t beginPosMs = 0;
+  int64_t endPosMs = 0;
 };
 
 class VideoToGifConverter final : public QObject {
@@ -21,7 +21,6 @@ class VideoToGifConverter final : public QObject {
   VideoToGifConverter(QObject* parent = nullptr);
   void push(QString output, std::vector<VideoProp> input);
  signals:
-  void finishConvert(QString path);
   void updateProgress(QUuid taskId, int progress);
 
  private:

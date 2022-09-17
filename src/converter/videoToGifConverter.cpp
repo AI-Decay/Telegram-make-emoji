@@ -40,16 +40,49 @@ struct StreamingParams {
 };
 
 struct StreamingContext {
-  AVFormatContext* avfc;
-  AVCodec* video_avc;
-  AVCodec* audio_avc;
-  AVStream* video_avs;
-  AVStream* audio_avs;
-  AVCodecContext* video_avcc;
-  AVCodecContext* audio_avcc;
-  int video_index;
-  int audio_index;
-  char* filename;
+  AVFormatContext* avfc = nullptr;
+  AVCodec* video_avc = nullptr;
+  AVStream* video_avs = nullptr;
+  AVCodecContext* video_avcc = nullptr;
+  int video_index = 0;
+  std::string filename;
+  ~StreamingContext() {}
+};
+
+struct StreamingContextDeleter {
+  void operator()(StreamingContext* context) {
+    if (context) {
+      auto* avfc = &context->avfc;
+      auto* avcc = &context->video_avcc;
+      if (avfc)
+        avformat_close_input(avfc);
+      if (avcc)
+        avcodec_free_context(avcc);
+      if (context->avfc)
+        avformat_free_context(context->avfc);
+    }
+  }
+};
+
+struct AVFrameDeleter {
+  void operator()(AVFrame* frame) {
+    if (frame)
+      av_frame_free(&frame);
+  }
+};
+
+struct AVPacketDeleter {
+  void operator()(AVPacket* packet) {
+    if (packet)
+      av_packet_free(&packet);
+  }
+};
+
+struct AVDictionaryDeleter {
+  void operator()(AVDictionary* dictionary) {
+    if (dictionary)
+      av_dict_free(&dictionary);
+  }
 };
 
 QString getResponse(int code) {
@@ -111,14 +144,6 @@ int prepare_decoder(std::shared_ptr<StreamingContext> sc) {
       if (fill_stream_info(sc->video_avs, &sc->video_avc, &sc->video_avcc)) {
         return -1;
       }
-    } else if (sc->avfc->streams[i]->codecpar->codec_type ==
-               AVMEDIA_TYPE_AUDIO) {
-      sc->audio_avs = sc->avfc->streams[i];
-      sc->audio_index = i;
-
-      if (fill_stream_info(sc->audio_avs, &sc->audio_avc, &sc->audio_avcc)) {
-        return -1;
-      }
     } else {
       qDebug() << "skipping streams other than audio and video";
     }
@@ -151,8 +176,8 @@ int prepare_video_encoder(std::shared_ptr<StreamingContext> sc,
     av_opt_set(sc->video_avcc->priv_data, sp.codec_priv_key,
                sp.codec_priv_value, 0);
 
-  sc->video_avcc->height = decoder_ctx->height;
-  sc->video_avcc->width = decoder_ctx->width;
+  sc->video_avcc->height = 100;
+  sc->video_avcc->width = 100;
   sc->video_avcc->sample_aspect_ratio = decoder_ctx->sample_aspect_ratio;
   if (sc->video_avc->pix_fmts)
     sc->video_avcc->pix_fmt = sc->video_avc->pix_fmts[0];
@@ -164,7 +189,6 @@ int prepare_video_encoder(std::shared_ptr<StreamingContext> sc,
   sc->video_avcc->rc_buffer_size = 4 * 1000 * sss;
   sc->video_avcc->rc_max_rate = 2 * 1000 * sss;
   sc->video_avcc->rc_min_rate = 2.5 * 1000 * sss;
-
   sc->video_avcc->time_base = av_inv_q(input_framerate);
   sc->video_avs->time_base = sc->video_avcc->time_base;
 
@@ -173,14 +197,7 @@ int prepare_video_encoder(std::shared_ptr<StreamingContext> sc,
     return -1;
   }
   avcodec_parameters_from_context(sc->video_avs->codecpar, sc->video_avcc);
-  return 0;
-}
 
-int prepare_copy(AVFormatContext* avfc,
-                 AVStream** avs,
-                 AVCodecParameters* decoder_par) {
-  *avs = avformat_new_stream(avfc, nullptr);
-  avcodec_parameters_copy((*avs)->codecpar, decoder_par);
   return 0;
 }
 
@@ -216,6 +233,10 @@ int encode_video(std::shared_ptr<StreamingContext> decoder,
 
     av_packet_rescale_ts(output_packet, decoder->video_avs->time_base,
                          encoder->video_avs->time_base);
+    // output_packet->dts -= 600642;
+    // qDebug() << output_packet->dts << output_packet->duration
+    //         << output_packet->pos << output_packet->size;
+
     response = av_interleaved_write_frame(encoder->avfc, output_packet);
     if (response != 0) {
       qDebug() << "Error while receiving packet from decoder: " << response
@@ -280,19 +301,21 @@ int VideoToGifConverter::convert(VideoProp input, QString output) {
        outputExt)
           .toStdString();
 
-  auto decoder = std::make_shared<StreamingContext>();
-  decoder->filename = inputStd.data();
+  auto decoder = std::shared_ptr<StreamingContext>(new StreamingContext,
+                                                   StreamingContextDeleter{});
+  auto encoder = std::shared_ptr<StreamingContext>(new StreamingContext,
+                                                   StreamingContextDeleter{});
 
-  auto encoder = std::make_shared<StreamingContext>();
-  encoder->filename = outputStd.data();
+  encoder->filename = std::move(outputStd);
+  decoder->filename = std::move(inputStd);
 
-  if (open_media(decoder->filename, &decoder->avfc))
+  if (open_media(decoder->filename.c_str(), &decoder->avfc))
     return -1;
   if (prepare_decoder(decoder))
     return -1;
 
   avformat_alloc_output_context2(&encoder->avfc, nullptr, nullptr,
-                                 encoder->filename);
+                                 encoder->filename.c_str());
   if (!encoder->avfc) {
     qDebug() << "could not allocate memory for output format";
     return -1;
@@ -304,9 +327,10 @@ int VideoToGifConverter::convert(VideoProp input, QString output) {
 
   if (encoder->avfc->oformat->flags & AVFMT_GLOBALHEADER)
     encoder->avfc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-
+  // INVESTIGATE
   if (!(encoder->avfc->oformat->flags & AVFMT_NOFILE)) {
-    if (avio_open(&encoder->avfc->pb, encoder->filename, AVIO_FLAG_WRITE) < 0) {
+    if (avio_open(&encoder->avfc->pb, encoder->filename.c_str(),
+                  AVIO_FLAG_WRITE) < 0) {
       qDebug() << "could not open the output file";
       return -1;
     }
@@ -323,13 +347,14 @@ int VideoToGifConverter::convert(VideoProp input, QString output) {
     return -1;
   }
 
-  AVFrame* input_frame = av_frame_alloc();
+  auto input_frame = std::unique_ptr<AVFrame, AVFrameDeleter>(av_frame_alloc());
   if (!input_frame) {
     qDebug() << "failed to allocated memory for AVFrame";
     return -1;
   }
 
-  AVPacket* input_packet = av_packet_alloc();
+  auto input_packet =
+      std::unique_ptr<AVPacket, AVPacketDeleter>(av_packet_alloc());
   if (!input_packet) {
     qDebug() << "failed to allocated memory for AVPacket";
     return -1;
@@ -340,54 +365,45 @@ int VideoToGifConverter::convert(VideoProp input, QString output) {
       static_cast<double>(
           streams[input_packet->stream_index]->avg_frame_rate.num) /
       streams[input_packet->stream_index]->avg_frame_rate.den;
-  const size_t beginFrame = input.beginPosMs * fps;
-  const size_t endFrame = input.endPosMs * fps;
+  const size_t beginFrame = input.beginPosMs * fps / 1000;
+  const size_t endFrame = input.endPosMs * fps / 1000;
   const auto totalFrames = endFrame - beginFrame;
 
   size_t count = 0;
   int progress = 0;
-  while (av_read_frame(decoder->avfc, input_packet) >= 0) {
+
+  int64_t starttime_int64 =
+      av_rescale_q(input.beginPosMs * AV_TIME_BASE / 1000, {1, AV_TIME_BASE},
+                   decoder->video_avs->time_base);
+
+  av_seek_frame(decoder->avfc, input_packet->stream_index, starttime_int64, 0);
+  avcodec_flush_buffers(decoder->video_avcc);
+
+  while (av_read_frame(decoder->avfc, input_packet.get()) >= 0) {
     if (streams[input_packet->stream_index]->codecpar->codec_type ==
             AVMEDIA_TYPE_VIDEO &&
-        count <= endFrame) {
-      if (count >= beginFrame) {
-        if (transcode_video(decoder, encoder, input_packet, input_frame)) {
-          return -1;
-        }
+        count < totalFrames) {
+      if (transcode_video(decoder, encoder, input_packet.get(),
+                          input_frame.get())) {
+        return -1;
       }
-      av_packet_unref(input_packet);
-      ++count;
       if (const auto pg = (count * 100) / totalFrames; pg != progress) {
         progress = pg;
         emit updateProgress(input.uuid, progress);
       }
+      av_packet_unref(input_packet.get());
+      ++count;
     }
   }
+  // Fix for file < 3 second TODO replace it
+  emit updateProgress(input.uuid, 100);
 
-  if (encode_video(decoder, encoder, nullptr))
+  if (encode_video(decoder, encoder, nullptr)) {
     return -1;
+  }
 
   av_write_trailer(encoder->avfc);
-
-  if (muxer_opts != nullptr) {
-    av_dict_free(&muxer_opts);
-  }
-
-  if (input_frame != nullptr) {
-    av_frame_free(&input_frame);
-  }
-
-  if (input_packet != nullptr) {
-    av_packet_free(&input_packet);
-  }
-
-  avformat_close_input(&decoder->avfc);
-
-  avformat_free_context(decoder->avfc);
-  avformat_free_context(encoder->avfc);
-
-  avcodec_free_context(&decoder->video_avcc);
-  avcodec_free_context(&decoder->audio_avcc);
+  // avio_close(&encoder->avfc->pb);
 
   return 0;
 }

@@ -18,7 +18,7 @@ int FilesListModel::columnCount(const QModelIndex& parent) const {
 QVariant FilesListModel::data(const QModelIndex& index, int role) const {
   if (role == Qt::DisplayRole) {
     return items[index.row()].getFileName();
-  } else if (role == Roles::QUuid) {
+  } else if (role == Roles::Uuid) {
     return items.getUuid(index.row());
   } else if (role == Roles::Progress) {
     return items[index.row()].getProgress();
@@ -32,14 +32,19 @@ bool FilesListModel::setData(const QModelIndex& index,
                              int role) {
   if (role == Roles::Progress) {
     items[index.row()].setProgress(value.toInt());
+    emit dataChanged(index, index, {role});
     return true;
   } else {
     return QAbstractListModel::setData(index, value, role);
   }
 }
 
-void FilesListModel::updateProgress(class QUuid uuid, int value) {
+void FilesListModel::updateProgress(QUuid uuid, int value) {
   items[uuid].setProgress(value);
+}
+
+QModelIndex FilesListModel::getIndexForUuid(const QUuid uuid) {
+  return index(items.getKey(uuid));
 }
 
 Qt::DropActions FilesListModel::supportedDropActions() const {

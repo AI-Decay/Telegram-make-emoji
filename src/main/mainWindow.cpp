@@ -49,14 +49,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   QObject::connect(
       convertButton, &QPushButton::clicked, outPathLabel,
       [outPathLabel, this]() {
-        std::vector<VideoProp> vector;
-        const auto selected = files->selectionModel()->selectedIndexes();
-        for (auto item : selected) {
-          vector.push_back({item.data(FilesListModel::Roles::QUuid).toUuid(),
-                            item.data(Qt::DisplayRole).toString(), 0, 3});
+        const auto count = files->model()->rowCount();
+        std::vector<VideoProp> items;
+        items.reserve(count);
+        QModelIndex index;
+        for (int i = 0; i < count; ++i) {
+          index = files->model()->index(i, 0);
+          items.push_back({index.data(FilesListModel::Roles::Uuid).toUuid(),
+                           index.data(Qt::DisplayRole).toString(), 600000,
+                           603000});
         }
 
-        convertor->push(outPathLabel->text(), std::move(vector));
+        convertor->push(outPathLabel->text(), std::move(items));
       });
 
   convertButton->setMinimumSize(200, 50);
@@ -80,7 +84,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
       convertor, &VideoToGifConverter::updateProgress, files,
       [this](QUuid uuid, int value) {
         if (auto* model = qobject_cast<FilesListModel*>(files->model())) {
-          model->updateProgress(uuid, value);
+          const auto index = model->getIndexForUuid(uuid);
+          model->setData(index, value, FilesListModel::Roles::Progress);
         }
       });
 
