@@ -357,7 +357,7 @@ int VideoToGifConverter::convert(VideoProp input, QString output) {
       }
       av_packet_unref(input_packet);
       ++count;
-      if (const auto pg = count * 100 / totalFrames; pg != progress) {
+      if (const auto pg = (count * 100) / totalFrames; pg != progress) {
         progress = pg;
         emit updateProgress(input.uuid, progress);
       }

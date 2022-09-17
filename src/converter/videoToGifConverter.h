@@ -15,7 +15,7 @@ struct VideoProp {
   int endPosMs = 0;
 };
 
-class VideoToGifConverter final : QObject {
+class VideoToGifConverter final : public QObject {
   Q_OBJECT
  public:
   VideoToGifConverter(QObject* parent = nullptr);

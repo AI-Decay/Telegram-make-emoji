@@ -20,9 +20,26 @@ QVariant FilesListModel::data(const QModelIndex& index, int role) const {
     return items[index.row()].getFileName();
   } else if (role == Roles::QUuid) {
     return items.getUuid(index.row());
+  } else if (role == Roles::Progress) {
+    return items[index.row()].getProgress();
   }
 
   return QVariant();
+}
+
+bool FilesListModel::setData(const QModelIndex& index,
+                             const QVariant& value,
+                             int role) {
+  if (role == Roles::Progress) {
+    items[index.row()].setProgress(value.toInt());
+    return true;
+  } else {
+    return QAbstractListModel::setData(index, value, role);
+  }
+}
+
+void FilesListModel::updateProgress(class QUuid uuid, int value) {
+  items[uuid].setProgress(value);
 }
 
 Qt::DropActions FilesListModel::supportedDropActions() const {

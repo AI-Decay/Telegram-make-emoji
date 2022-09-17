@@ -3,12 +3,15 @@
 #include <QString>
 
 class File {
-public:
+ public:
   File(QString filName);
-  QString getFileName() const;
+  QString getFileName() const noexcept;
+  int getProgress() const noexcept;
+  void setProgress(int value) noexcept;
 
-private:
+ private:
+  int progress = 0;
   const QString _fileName;
 };
 
-#endif // FILE_H
+#endif  // FILE_H

@@ -22,6 +22,10 @@ class MultiIndex {
 
   const T& operator[](QUuid uuid) const { return itemsMap[uuid]; }
 
+  T& operator[](size_t index) { return itemsList[index]; }
+
+  T& operator[](QUuid uuid) { return itemsList[itemsMap[uuid]]; }
+
   typename QList<T>::iterator begin() const { return itemsList.begin(); }
 
   typename QList<T>::iterator end() const { return itemsList.end(); }

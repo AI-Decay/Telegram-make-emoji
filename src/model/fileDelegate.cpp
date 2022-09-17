@@ -1,4 +1,6 @@
 #include "fileDelegate.h"
+#include "filesListModel.h"
+
 #include <QApplication>
 
 FileDelegate::FileDelegate(QObject* parent) : QItemDelegate(parent) {}
@@ -19,8 +21,8 @@ void FileDelegate::paint(QPainter* painter,
   progressBarOption.textVisible = true;
 
   // Set the progress and text values of the style option.
-  int progress = 25;
-  progressBarOption.progress = progress < 0 ? 0 : progress;
+  progressBarOption.progress =
+      index.data(FilesListModel::Roles::Progress).toInt();
   progressBarOption.text = index.data(Qt::DisplayRole).toString();
 
   // Draw the progress bar onto the view.

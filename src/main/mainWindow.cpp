@@ -76,6 +76,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   files->setDragDropMode(QAbstractItemView::DropOnly);
   files->setItemDelegate(new FileDelegate(files));
 
+  QObject::connect(
+      convertor, &VideoToGifConverter::updateProgress, files,
+      [this](QUuid uuid, int value) {
+        if (auto* model = qobject_cast<FilesListModel*>(files->model())) {
+          model->updateProgress(uuid, value);
+        }
+      });
+
   central->setLayout(mainLayout);
   setCentralWidget(central);
 
