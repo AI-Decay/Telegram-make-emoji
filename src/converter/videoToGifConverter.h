@@ -9,6 +9,7 @@ class QString;
 class QStringList;
 
 struct VideoProp {
+  QUuid uuid;
   QString path;
   int beginPosMs = 0;
   int endPosMs = 0;

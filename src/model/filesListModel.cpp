@@ -1,20 +1,25 @@
 #include "filesListModel.h"
-#include "file.h"
 #include <QDebug>
 #include <QMimeData>
 #include <QUrl>
+#include <QUuid>
+#include "file.h"
 
 FilesListModel::FilesListModel() {}
 
-int FilesListModel::rowCount(const QModelIndex &parent) const {
-  return list.size();
+int FilesListModel::rowCount(const QModelIndex& parent) const {
+  return items.size();
 }
 
-int FilesListModel::columnCount(const QModelIndex &parent) const { return 1; }
+int FilesListModel::columnCount(const QModelIndex& parent) const {
+  return 1;
+}
 
-QVariant FilesListModel::data(const QModelIndex &index, int role) const {
+QVariant FilesListModel::data(const QModelIndex& index, int role) const {
   if (role == Qt::DisplayRole) {
-    return list.at(index.row()).getFileName();
+    return items[index.row()].getFileName();
+  } else if (role == Roles::QUuid) {
+    return items.getUuid(index.row());
   }
 
   return QVariant();
@@ -24,9 +29,11 @@ Qt::DropActions FilesListModel::supportedDropActions() const {
   return Qt::CopyAction | Qt::MoveAction;
 }
 
-bool FilesListModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
-                                  int row, int column,
-                                  const QModelIndex &parent) {
+bool FilesListModel::dropMimeData(const QMimeData* data,
+                                  Qt::DropAction action,
+                                  int row,
+                                  int column,
+                                  const QModelIndex& parent) {
   Q_UNUSED(row);
   Q_UNUSED(column);
   Q_UNUSED(action);
@@ -34,14 +41,14 @@ bool FilesListModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
   const auto allUrls = data->urls();
   const auto localFilesCount =
       std::count_if(allUrls.begin(), allUrls.end(),
-                    [](const QUrl &u) { return u.isLocalFile(); });
+                    [](const QUrl& u) { return u.isLocalFile(); });
 
   if (localFilesCount > 0) {
-    beginInsertRows(parent, list.size(), list.size() + localFilesCount);
+    beginInsertRows(parent, items.size(), items.size() + localFilesCount);
 
-    for (const auto &url : allUrls) {
+    for (const auto& url : allUrls) {
       if (url.isLocalFile()) {
-        list.push_back(File(url.toLocalFile()));
+        items.push_back(File(url.toLocalFile()));
       }
     }
 
@@ -51,13 +58,15 @@ bool FilesListModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
   return localFilesCount > 0;
 }
 
-bool FilesListModel::canDropMimeData(const QMimeData *data,
-                                     Qt::DropAction action, int row, int column,
-                                     const QModelIndex &parent) const {
+bool FilesListModel::canDropMimeData(const QMimeData* data,
+                                     Qt::DropAction action,
+                                     int row,
+                                     int column,
+                                     const QModelIndex& parent) const {
   return true;
 }
 
-Qt::ItemFlags FilesListModel::flags(const QModelIndex &index) const {
+Qt::ItemFlags FilesListModel::flags(const QModelIndex& index) const {
   if (!index.isValid()) {
     return Qt::ItemIsDropEnabled;
   }

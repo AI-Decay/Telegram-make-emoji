@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 
 #include "converter/videoToGifConverter.h"
+#include "model/fileDelegate.h"
 #include "model/filesListModel.h"
 #include "utility/styleSheetUtility.h"
 
@@ -51,7 +52,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         std::vector<VideoProp> vector;
         const auto selected = files->selectionModel()->selectedIndexes();
         for (auto item : selected) {
-          vector.push_back({item.data(Qt::DisplayRole).toString(), 0, 3});
+          vector.push_back({item.data(FilesListModel::Roles::QUuid).toUuid(),
+                            item.data(Qt::DisplayRole).toString(), 0, 3});
         }
 
         convertor->push(outPathLabel->text(), std::move(vector));
@@ -72,6 +74,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   files->viewport()->setAcceptDrops(true);
   files->setDropIndicatorShown(true);
   files->setDragDropMode(QAbstractItemView::DropOnly);
+  files->setItemDelegate(new FileDelegate(files));
 
   central->setLayout(mainLayout);
   setCentralWidget(central);

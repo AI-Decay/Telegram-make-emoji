@@ -30,6 +30,9 @@ set(PROJECT_SOURCES
         src/model/file.cpp
         src/converter/videoToGifConverter.h
         src/converter/videoToGifConverter.cpp
+        src/model/fileDelegate.h
+        src/model/fileDelegate.cpp
+        src/utility/multiIndex.h
 )
 
 find_path(AVCODEC_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavcodec NAMES avcodec.h)
