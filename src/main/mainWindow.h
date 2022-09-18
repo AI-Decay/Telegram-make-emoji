@@ -4,7 +4,7 @@
 #include <QMainWindow>
 
 class QListView;
-class VideoToGifConverter;
+class ToWebmConvertor;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -16,6 +16,6 @@ class MainWindow : public QMainWindow {
 
  private:
   QListView* files;
-  VideoToGifConverter* convertor;
+  ToWebmConvertor* convertor;
 };
 #endif  // MAINWINDOW_H

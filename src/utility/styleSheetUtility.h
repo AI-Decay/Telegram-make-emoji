@@ -2,8 +2,9 @@
 #define STYLESHEETUTILITY_H
 
 #include <QFile>
+#include <QString>
 
-QString loadStyleSheet(const QString &fileName) {
+inline QString loadStyleSheet(const QString& fileName) {
   QFile file(fileName);
   file.open(QFile::ReadOnly);
   QString styleSheet = QLatin1String(file.readAll());
@@ -11,4 +12,13 @@ QString loadStyleSheet(const QString &fileName) {
   return styleSheet;
 }
 
-#endif // STYLESHEETUTILITY_H
+template <typename T>
+inline T* createWidget(QWidget* parent = nullptr,
+                       const QString objectName = "") {
+  auto* widget = new T(parent);
+  if (!objectName.isEmpty())
+    widget->setObjectName(objectName);
+  return widget;
+}
+
+#endif  // STYLESHEETUTILITY_H

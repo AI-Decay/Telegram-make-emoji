@@ -1,0 +1,20 @@
+QSpinBox#SpinBoxMax {
+    border-width: 1;
+}
+
+QSpinBox#SpinBoxMin {
+    border-width: 1;
+}
+
+QLabel#LabelMax {
+    border: 2px solid green;
+    border-radius: 2px;
+    background-color: #FAF4F4
+}
+
+QLabel#LabelMin {
+    border: 2px solid green;
+    border-radius: 2px;
+    background-color: #FAF4F4
+}
+

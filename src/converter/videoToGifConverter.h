@@ -15,10 +15,10 @@ struct VideoProp {
   int64_t endPosMs = 0;
 };
 
-class VideoToGifConverter final : public QObject {
+class ToWebmConvertor final : public QObject {
   Q_OBJECT
  public:
-  VideoToGifConverter(QObject* parent = nullptr);
+  ToWebmConvertor(QObject* parent = nullptr);
   void push(QString output, std::vector<VideoProp> input);
  signals:
   void updateProgress(QUuid taskId, int progress);

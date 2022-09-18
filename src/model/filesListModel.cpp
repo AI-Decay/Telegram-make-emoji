@@ -4,6 +4,7 @@
 #include <QUrl>
 #include <QUuid>
 #include "file.h"
+#include "utility/ffmpegUtility.h"
 
 FilesListModel::FilesListModel() {}
 
@@ -22,6 +23,12 @@ QVariant FilesListModel::data(const QModelIndex& index, int role) const {
     return items.getUuid(index.row());
   } else if (role == Roles::Progress) {
     return items[index.row()].getProgress();
+  } else if (role == Roles::Duration) {
+    return items[index.row()].getDurationMs();
+  } else if (role == Roles::BeginPos) {
+    return items[index.row()].getBeginPosMs();
+  } else if (role == Roles::EndPos) {
+    return items[index.row()].getEndPosMs();
   }
 
   return QVariant();
@@ -34,9 +41,15 @@ bool FilesListModel::setData(const QModelIndex& index,
     items[index.row()].setProgress(value.toInt());
     emit dataChanged(index, index, {role});
     return true;
-  } else {
-    return QAbstractListModel::setData(index, value, role);
+  } else if (role == Roles::BeginPos) {
+    items[index.row()].setBeginPosMs(value.toInt());
+    return true;
+  } else if (role == Roles::EndPos) {
+    items[index.row()].setEndPosMs(value.toInt());
+    return true;
   }
+
+  return QAbstractListModel::setData(index, value, role);
 }
 
 void FilesListModel::updateProgress(QUuid uuid, int value) {
@@ -70,7 +83,11 @@ bool FilesListModel::dropMimeData(const QMimeData* data,
 
     for (const auto& url : allUrls) {
       if (url.isLocalFile()) {
-        items.push_back(File(url.toLocalFile()));
+        const auto localFile = url.toLocalFile();
+        const auto duration = getVideoDurationMs(localFile);
+        if (duration > 0) {
+          items.push_back(File(localFile, duration));
+        }
       }
     }
 

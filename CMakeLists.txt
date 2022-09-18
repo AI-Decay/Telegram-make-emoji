@@ -33,6 +33,10 @@ set(PROJECT_SOURCES
         src/model/fileDelegate.h
         src/model/fileDelegate.cpp
         src/utility/multiIndex.h
+        src/custom/inputsliderwidget.h
+        src/custom/inputsliderwidget.cpp
+        src/utility/ffmpegUtility.h
+        src/utility/ffmpegUtility.cpp
 )
 
 find_path(SWSCALE_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavcodec NAMES swscale.h)

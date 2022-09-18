@@ -33,7 +33,7 @@ class FilesListModel : public QAbstractListModel {
                        const QModelIndex& parent) const override;
   Qt::ItemFlags flags(const QModelIndex& index) const override;
 
-  enum Roles { Uuid = Qt::UserRole + 1, Progress };
+  enum Roles { Uuid = Qt::UserRole + 1, Progress, Duration, BeginPos, EndPos };
 
  private:
   MultiIndex<File> items;

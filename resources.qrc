@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/styles">
         <file alias="MainWindowStyles.css">Resources/Styles/MainWindow.css</file>
+        <file alias="InputSliderWidgetStyle.css">Resources/Styles/InputSliderWidgetStyle.css</file>
     </qresource>
     <qresource prefix="/images">
         <file alias="test.gif">Test.gif</file>
