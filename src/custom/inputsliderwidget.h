@@ -10,8 +10,10 @@ class InputSliderWidget : public QWidget {
  public:
   explicit InputSliderWidget(QWidget* parent = nullptr);
   void setLimit(int max);
+
   void setBegin(int value);
   void setEnd(int value);
+
   int getBegin() const;
   int getEnd() const;
 

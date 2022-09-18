@@ -61,9 +61,7 @@ void InputSliderWidget::setLimit(int max) {
 }
 
 void InputSliderWidget::setBegin(int value) { spinBoxMin->setValue(value); }
-
 void InputSliderWidget::setEnd(int value) { spinBoxMax->setValue(value); }
 
 int InputSliderWidget::getBegin() const { return spinBoxMin->value(); }
-
 int InputSliderWidget::getEnd() const { return spinBoxMax->value(); }
