@@ -56,8 +56,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         for (int i = 0; i < count; ++i) {
           index = files->model()->index(i, 0);
           items.push_back({index.data(FilesListModel::Roles::Uuid).toUuid(),
-                           index.data(Qt::DisplayRole).toString(), 600000,
-                           603000});
+                           index.data(Qt::DisplayRole).toString(), 0, 3000});
         }
 
         convertor->push(outPathLabel->text(), std::move(items));
