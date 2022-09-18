@@ -1,4 +1,4 @@
-#include "mainWindow.h"
+#include "MainWindow.h"
 
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -12,13 +12,14 @@
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
-#include "converter/videoToGifConverter.h"
-#include "custom/inputsliderwidget.h"
-#include "model/fileDelegate.h"
-#include "model/filesListModel.h"
-#include "utility/styleSheetUtility.h"
+#include "converter/ToWebmConvertor.h"
+#include "custom/InputSliderWidget.h"
+#include "model/ConvertItemDelegate.h"
+#include "model/ConvertItemListModel.h"
+#include "utility/StyleSheetUtility.h"
 
 namespace {
+constexpr auto DefaultEndPos = 3000;
 constexpr auto WindowStyle = ":/styles/MainWindowStyles.css";
 constexpr QSize WindowSizeHint(800, 600);
 constexpr auto testGif = ":/images/test.gif";
@@ -60,11 +61,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         items.reserve(count);
 
         for (auto& index : files->selectionModel()->selectedRows()) {
-          if (auto* model = qobject_cast<FilesListModel*>(files->model())) {
+          if (auto* model =
+                  qobject_cast<ConvertItemListModel*>(files->model())) {
             const auto begin = inputWidget->getBegin();
             const auto end = inputWidget->getEnd();
-            model->setData(index, begin, FilesListModel::Roles::BeginPos);
-            model->setData(index, end, FilesListModel::Roles::EndPos);
+            model->setData(index, begin, ConvertItemListModel::Roles::BeginPos);
+            model->setData(index, end, ConvertItemListModel::Roles::EndPos);
           }
         }
 
@@ -72,14 +74,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         for (int i = 0; i < count; ++i) {
           index = files->model()->index(i, 0);
           const auto begin =
-              index.data(FilesListModel::Roles::BeginPos).toInt();
-          const auto end = index.data(FilesListModel::Roles::EndPos).toInt();
-
+              index.data(ConvertItemListModel::Roles::BeginPos).toInt();
+          auto end = index.data(ConvertItemListModel::Roles::EndPos).toInt();
+          if (end == 0)
+            end = std::min(
+                index.data(ConvertItemListModel::Roles::Duration).toInt(),
+                DefaultEndPos);
           items.push_back({
-              index.data(FilesListModel::Roles::Uuid).toUuid(),
+              index.data(ConvertItemListModel::Roles::Uuid).toUuid(),
               index.data(Qt::DisplayRole).toString(),
               begin,
-              end == 0 ? 3000 : end,
+              end,
           });
         }
 
@@ -100,20 +105,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   operationLayout->setAlignment(Qt::AlignVCenter);
 
   files = new QListView(this);
-  files->setModel(new FilesListModel());
+  files->setModel(new ConvertItemListModel());
   files->setSelectionMode(QAbstractItemView::SingleSelection);
   files->setDragEnabled(true);
   files->viewport()->setAcceptDrops(true);
   files->setDropIndicatorShown(true);
   files->setDragDropMode(QAbstractItemView::DropOnly);
-  files->setItemDelegate(new FileDelegate(files));
+  files->setItemDelegate(new ConvertItemDelegate(files));
 
   QObject::connect(
       convertor, &ToWebmConvertor::updateProgress, files,
       [this](QUuid uuid, int value) {
-        if (auto* model = qobject_cast<FilesListModel*>(files->model())) {
+        if (auto* model = qobject_cast<ConvertItemListModel*>(files->model())) {
           const auto index = model->getIndexForUuid(uuid);
-          model->setData(index, value, FilesListModel::Roles::Progress);
+          model->setData(index, value, ConvertItemListModel::Roles::Progress);
         }
       });
 
@@ -123,23 +128,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                           const QModelIndex& previous) {
         if (previous.isValid()) {
           qDebug() << previous.row();
-          if (auto* model = qobject_cast<FilesListModel*>(files->model())) {
+          if (auto* model =
+                  qobject_cast<ConvertItemListModel*>(files->model())) {
             const auto begin = inputWidget->getBegin();
             const auto end = inputWidget->getEnd();
-            model->setData(previous, begin, FilesListModel::Roles::BeginPos);
-            model->setData(previous, end, FilesListModel::Roles::EndPos);
+            model->setData(previous, begin,
+                           ConvertItemListModel::Roles::BeginPos);
+            model->setData(previous, end, ConvertItemListModel::Roles::EndPos);
           }
         }
 
         if (current.isValid()) {
           inputWidget->setEnabled(true);
           inputWidget->setLimit(
-              current.data(FilesListModel::Roles::Duration).toInt());
-          if (auto* model = qobject_cast<FilesListModel*>(files->model())) {
+              current.data(ConvertItemListModel::Roles::Duration).toInt());
+          if (auto* model =
+                  qobject_cast<ConvertItemListModel*>(files->model())) {
             const auto begin =
-                model->data(current, FilesListModel::Roles::BeginPos).toInt();
+                model->data(current, ConvertItemListModel::Roles::BeginPos)
+                    .toInt();
             const auto end =
-                model->data(current, FilesListModel::Roles::EndPos).toInt();
+                model->data(current, ConvertItemListModel::Roles::EndPos)
+                    .toInt();
             inputWidget->setBegin(begin);
             inputWidget->setEnd(end);
           }
@@ -168,6 +178,4 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
 MainWindow::~MainWindow() {}
 
-QSize MainWindow::sizeHint() const {
-  return WindowSizeHint;
-}
+QSize MainWindow::sizeHint() const { return WindowSizeHint; }

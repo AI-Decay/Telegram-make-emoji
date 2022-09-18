@@ -3,10 +3,10 @@
 
 #include <QStyledItemDelegate>
 
-class FileDelegate : public QStyledItemDelegate {
+class ConvertItemDelegate : public QStyledItemDelegate {
   Q_OBJECT
  public:
-  FileDelegate(QObject* parent = nullptr);
+  ConvertItemDelegate(QObject* parent = nullptr);
   void paint(QPainter* painter,
              const QStyleOptionViewItem& option,
              const QModelIndex& index) const override;

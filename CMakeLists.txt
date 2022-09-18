@@ -21,22 +21,22 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
 set(PROJECT_SOURCES
         src/main/main.cpp
-        src/main/mainWindow.cpp
-        src/main/mainWindow.h
-        src/utility/styleSheetUtility.h
-        src/model/filesListModel.h
-        src/model/filesListModel.cpp
-        src/model/file.h
-        src/model/file.cpp
-        src/converter/videoToGifConverter.h
-        src/converter/videoToGifConverter.cpp
-        src/model/fileDelegate.h
-        src/model/fileDelegate.cpp
-        src/utility/multiIndex.h
-        src/custom/inputsliderwidget.h
-        src/custom/inputsliderwidget.cpp
-        src/utility/ffmpegUtility.h
-        src/utility/ffmpegUtility.cpp
+        src/main/MainWindow.cpp
+        src/main/MainWindow.h
+        src/utility/StyleSheetUtility.h
+        src/model/ConvertItemListModel.h
+        src/model/ConvertItemListModel.cpp
+        src/model/ConvertItem.h
+        src/model/ConvertItem.cpp
+        src/converter/ToWebmConvertor.h
+        src/converter/ToWebmConvertor.cpp
+        src/model/ConvertItemDelegate.h
+        src/model/ConvertItemDelegate.cpp
+        src/utility/MultiIndex.h
+        src/custom/InputSliderWidget.h
+        src/custom/InputSliderWidget.cpp
+        src/utility/FFmpegUtility.h
+        src/utility/FFmpegUtility.cpp
 )
 
 find_path(SWSCALE_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavcodec NAMES swscale.h)

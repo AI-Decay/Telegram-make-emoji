@@ -1,22 +1,24 @@
-#include "filesListModel.h"
+#include "ConvertItemListModel.h"
+
 #include <QDebug>
 #include <QMimeData>
 #include <QUrl>
 #include <QUuid>
-#include "file.h"
-#include "utility/ffmpegUtility.h"
 
-FilesListModel::FilesListModel() {}
+#include "ConvertItem.h"
+#include "utility/FFmpegUtility.h"
 
-int FilesListModel::rowCount(const QModelIndex& parent) const {
+ConvertItemListModel::ConvertItemListModel() {}
+
+int ConvertItemListModel::rowCount(const QModelIndex& parent) const {
   return items.size();
 }
 
-int FilesListModel::columnCount(const QModelIndex& parent) const {
+int ConvertItemListModel::columnCount(const QModelIndex& parent) const {
   return 1;
 }
 
-QVariant FilesListModel::data(const QModelIndex& index, int role) const {
+QVariant ConvertItemListModel::data(const QModelIndex& index, int role) const {
   if (role == Qt::DisplayRole) {
     return items[index.row()].getFileName();
   } else if (role == Roles::Uuid) {
@@ -34,11 +36,14 @@ QVariant FilesListModel::data(const QModelIndex& index, int role) const {
   return QVariant();
 }
 
-bool FilesListModel::setData(const QModelIndex& index,
-                             const QVariant& value,
-                             int role) {
+bool ConvertItemListModel::setData(const QModelIndex& index,
+                                   const QVariant& value, int role) {
   if (role == Roles::Progress) {
-    items[index.row()].setProgress(value.toInt());
+    const auto progress = value.toInt();
+    if (progress == 100)
+      items.erace(index.row());
+    else
+      items[index.row()].setProgress(value.toInt());
     emit dataChanged(index, index, {role});
     return true;
   } else if (role == Roles::BeginPos) {
@@ -52,23 +57,21 @@ bool FilesListModel::setData(const QModelIndex& index,
   return QAbstractListModel::setData(index, value, role);
 }
 
-void FilesListModel::updateProgress(QUuid uuid, int value) {
+void ConvertItemListModel::updateProgress(QUuid uuid, int value) {
   items[uuid].setProgress(value);
 }
 
-QModelIndex FilesListModel::getIndexForUuid(const QUuid uuid) {
+QModelIndex ConvertItemListModel::getIndexForUuid(const QUuid uuid) {
   return index(items.getKey(uuid));
 }
 
-Qt::DropActions FilesListModel::supportedDropActions() const {
+Qt::DropActions ConvertItemListModel::supportedDropActions() const {
   return Qt::CopyAction | Qt::MoveAction;
 }
 
-bool FilesListModel::dropMimeData(const QMimeData* data,
-                                  Qt::DropAction action,
-                                  int row,
-                                  int column,
-                                  const QModelIndex& parent) {
+bool ConvertItemListModel::dropMimeData(const QMimeData* data,
+                                        Qt::DropAction action, int row,
+                                        int column, const QModelIndex& parent) {
   Q_UNUSED(row);
   Q_UNUSED(column);
   Q_UNUSED(action);
@@ -86,7 +89,7 @@ bool FilesListModel::dropMimeData(const QMimeData* data,
         const auto localFile = url.toLocalFile();
         const auto duration = getVideoDurationMs(localFile);
         if (duration > 0) {
-          items.push_back(File(localFile, duration));
+          items.push_back(ConvertItem(localFile, duration));
         }
       }
     }
@@ -97,15 +100,14 @@ bool FilesListModel::dropMimeData(const QMimeData* data,
   return localFilesCount > 0;
 }
 
-bool FilesListModel::canDropMimeData(const QMimeData* data,
-                                     Qt::DropAction action,
-                                     int row,
-                                     int column,
-                                     const QModelIndex& parent) const {
+bool ConvertItemListModel::canDropMimeData(const QMimeData* data,
+                                           Qt::DropAction action, int row,
+                                           int column,
+                                           const QModelIndex& parent) const {
   return true;
 }
 
-Qt::ItemFlags FilesListModel::flags(const QModelIndex& index) const {
+Qt::ItemFlags ConvertItemListModel::flags(const QModelIndex& index) const {
   if (!index.isValid()) {
     return Qt::ItemIsDropEnabled;
   }

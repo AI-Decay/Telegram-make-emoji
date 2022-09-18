@@ -1,4 +1,5 @@
-#include "videoToGifConverter.h"
+#include "ToWebmConvertor.h"
+
 #include <QDebug>
 #include <QDir>
 #include <QString>
@@ -20,6 +21,17 @@ constexpr auto maxDurationMs = 3000;
 constexpr auto maxFileSizeByte = 100000;
 constexpr auto maxWidth = 100;
 constexpr auto maxHeight = 100;
+#ifdef DebugAVPacket
+void dumpAVPacket(AVPacket* pk) {
+  if (!pk) return;
+
+  qDebug() << "dts: " << pk->dts << "duration: " << pk->duration
+           << "flags: " << pk->flags << "pos: " << pk->pos << "pts: " << pk->pts
+           << "side_data_elems: " << pk->side_data_elems << "size: " << pk->size
+           << "time_base.den: " << pk->time_base.den
+           << "time_base.num: " << pk->time_base.num;
+}
+#endif
 
 struct StreamingParams {
   std::string output_extension;
@@ -44,41 +56,34 @@ struct StreamingContextDeleter {
     if (context) {
       auto* avfc = &context->avfc;
       auto* avcc = &context->video_avcc;
-      if (avfc)
-        avformat_close_input(avfc);
-      if (avcc)
-        avcodec_free_context(avcc);
-      if (context->avfc)
-        avformat_free_context(context->avfc);
+      if (avfc) avformat_close_input(avfc);
+      if (avcc) avcodec_free_context(avcc);
+      if (context->avfc) avformat_free_context(context->avfc);
     }
   }
 };
 
 struct AVFrameDeleter {
   void operator()(AVFrame* frame) {
-    if (frame)
-      av_frame_free(&frame);
+    if (frame) av_frame_free(&frame);
   }
 };
 
 struct AVPacketDeleter {
   void operator()(AVPacket* packet) {
-    if (packet)
-      av_packet_free(&packet);
+    if (packet) av_packet_free(&packet);
   }
 };
 
 struct SwsContextDeleter {
   void operator()(SwsContext* context) {
-    if (context)
-      sws_freeContext(context);
+    if (context) sws_freeContext(context);
   }
 };
 
 struct AVDictionaryDeleter {
   void operator()(AVDictionary* dictionary) {
-    if (dictionary)
-      av_dict_free(&dictionary);
+    if (dictionary) av_dict_free(&dictionary);
   }
 };
 
@@ -186,7 +191,7 @@ int prepare_video_encoder(std::shared_ptr<StreamingContext> sc,
   constexpr int64_t maxBitrate = maxFileSizeByte / (maxDurationMs / 1000.0) - 1;
 
   sc->video_avcc->bit_rate = maxBitrate;
-  sc->video_avcc->rc_buffer_size = decoder_ctx->rc_buffer_size;
+  sc->video_avcc->rc_buffer_size = maxFileSizeByte;
   sc->video_avcc->rc_max_rate = maxBitrate;
   sc->video_avcc->rc_min_rate = maxBitrate;
   sc->video_avcc->time_base = av_inv_q(input_framerate);
@@ -203,10 +208,8 @@ int prepare_video_encoder(std::shared_ptr<StreamingContext> sc,
 
 int encode_video(std::shared_ptr<StreamingContext> decoder,
                  std::shared_ptr<StreamingContext> encoder,
-                 AVFrame* input_frame,
-                 SwsContext* scale) {
-  if (input_frame)
-    input_frame->pict_type = AV_PICTURE_TYPE_NONE;
+                 AVFrame* input_frame, SwsContext* scale) {
+  if (input_frame) input_frame->pict_type = AV_PICTURE_TYPE_NONE;
 
   AVPacket* output_packet = av_packet_alloc();
   if (!output_packet) {
@@ -238,19 +241,8 @@ int encode_video(std::shared_ptr<StreamingContext> decoder,
                               decoder->video_avs->avg_frame_rate.num *
                               decoder->video_avs->avg_frame_rate.den;
 
-    /*qDebug() << "Before: " << output_packet->dts << output_packet->duration
-             << output_packet->pos << output_packet->size
-             << output_packet->time_base.num / output_packet->time_base.den;*/
-
-    // decoder->video_avs->time_base.den; qDebug() <<
-    // encoder->video_avs->time_base.num << encoder->video_avs->time_base.den;
-
     av_packet_rescale_ts(output_packet, decoder->video_avs->time_base,
                          encoder->video_avs->time_base);
-
-    /*qDebug() << "After: " << output_packet->dts << output_packet->duration
-             << output_packet->pos << output_packet->size
-             << output_packet->time_base.num / output_packet->time_base.den;*/
 
     response = av_interleaved_write_frame(encoder->avfc, output_packet);
     if (response != 0) {
@@ -266,8 +258,7 @@ int encode_video(std::shared_ptr<StreamingContext> decoder,
 
 int transcode_video(std::shared_ptr<StreamingContext> decoder,
                     std::shared_ptr<StreamingContext> encoder,
-                    AVPacket* input_packet,
-                    AVFrame* input_frame,
+                    AVPacket* input_packet, AVFrame* input_frame,
                     SwsContext* scale) {
   int response = avcodec_send_packet(decoder->video_avcc, input_packet);
   if (response < 0) {
@@ -287,8 +278,7 @@ int transcode_video(std::shared_ptr<StreamingContext> decoder,
     }
 
     if (response >= 0) {
-      if (encode_video(decoder, encoder, input_frame, scale))
-        return -1;
+      if (encode_video(decoder, encoder, input_frame, scale)) return -1;
     }
     av_frame_unref(input_frame);
   }
@@ -308,6 +298,11 @@ void ToWebmConvertor::push(QString output, std::vector<VideoProp> input) {
 }
 
 int ToWebmConvertor::convert(VideoProp input, QString output) {
+  if (input.beginPosMs >= input.endPosMs) {
+    qDebug() << "incorrect pos, begin >= end";
+    return -1;
+  }
+
   StreamingParams sp;
   sp.output_extension = ".webm";
   sp.video_codec = "libvpx-vp9";
@@ -326,10 +321,8 @@ int ToWebmConvertor::convert(VideoProp input, QString output) {
   encoder->filename = std::move(outputStd);
   decoder->filename = std::move(inputStd);
 
-  if (open_media(decoder->filename.c_str(), &decoder->avfc))
-    return -1;
-  if (prepare_decoder(decoder))
-    return -1;
+  if (open_media(decoder->filename.c_str(), &decoder->avfc)) return -1;
+  if (prepare_decoder(decoder)) return -1;
 
   avformat_alloc_output_context2(&encoder->avfc, nullptr, nullptr,
                                  encoder->filename.c_str());
@@ -403,10 +396,21 @@ int ToWebmConvertor::convert(VideoProp input, QString output) {
   av_seek_frame(decoder->avfc, inputPacket->stream_index, startTime, 0);
   avcodec_flush_buffers(decoder->video_avcc);
 
+  // Note: Important to calculate manually and set pts, duration, dts because we
+  // did av_seek_frame
+  const int64_t frameDuration =
+      decoder->video_avs->time_base.den /
+      (input_framerate.num / static_cast<double>(input_framerate.den));
+
   while (count < totalFrames &&
          av_read_frame(decoder->avfc, inputPacket.get()) >= 0) {
     if (streams[inputPacket->stream_index]->codecpar->codec_type ==
         AVMEDIA_TYPE_VIDEO) {
+      const int64_t frameTime = count * frameDuration;
+      inputPacket->pts = frameTime / decoder->video_avs->time_base.num;
+      inputPacket->duration = frameDuration;
+      inputPacket->dts = inputPacket->pts;
+
       if (transcode_video(decoder, encoder, inputPacket.get(), inputFrame.get(),
                           scaleContext.get())) {
         return -1;
@@ -424,7 +428,6 @@ int ToWebmConvertor::convert(VideoProp input, QString output) {
     return -1;
   }
 
-  // Fix for file < 3 second TODO replace it
   emit updateProgress(input.uuid, 100);
 
   av_write_trailer(encoder->avfc);

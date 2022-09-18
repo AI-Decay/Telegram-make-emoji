@@ -1,10 +1,10 @@
-#ifndef FILE_H
-#define FILE_H
+#ifndef CONVERTITEM_H
+#define CONVERTITEM_H
 #include <QString>
 
-class File {
+class ConvertItem {
  public:
-  File(QString filName, int64_t durationMs);
+  ConvertItem(QString filName, int64_t durationMs);
   QString getFileName() const;
   int getProgress() const;
   void setProgress(int value);
@@ -23,4 +23,4 @@ class File {
   const QString _fileName;
 };
 
-#endif  // FILE_H
+#endif  // CONVERTITEM_H

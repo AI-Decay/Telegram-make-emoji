@@ -1,18 +1,20 @@
-#include "fileDelegate.h"
-#include "filesListModel.h"
+#include "ConvertItemDelegate.h"
 
 #include <QApplication>
 #include <QPainter>
+
+#include "ConvertItemListModel.h"
 
 namespace {
 constexpr auto minHeight = 30;
 }
 
-FileDelegate::FileDelegate(QObject* parent) : QStyledItemDelegate(parent) {}
+ConvertItemDelegate::ConvertItemDelegate(QObject* parent)
+    : QStyledItemDelegate(parent) {}
 
-void FileDelegate::paint(QPainter* painter,
-                         const QStyleOptionViewItem& option,
-                         const QModelIndex& index) const {
+void ConvertItemDelegate::paint(QPainter* painter,
+                                const QStyleOptionViewItem& option,
+                                const QModelIndex& index) const {
   // if (option.state & QStyle::State_HasFocus)
 
   QStyleOptionViewItem drawOption(option);
@@ -27,7 +29,7 @@ void FileDelegate::paint(QPainter* painter,
   progressBarOption.maximum = 100;
   progressBarOption.textVisible = false;
   progressBarOption.progress =
-      index.data(FilesListModel::Roles::Progress).toInt();
+      index.data(ConvertItemListModel::Roles::Progress).toInt();
 
   QApplication::style()->drawControl(QStyle::CE_ProgressBar, &progressBarOption,
                                      painter);
@@ -35,8 +37,8 @@ void FileDelegate::paint(QPainter* painter,
   QStyledItemDelegate::paint(painter, drawOption, index);
 }
 
-QSize FileDelegate::sizeHint(const QStyleOptionViewItem& option,
-                             const QModelIndex& index) const {
+QSize ConvertItemDelegate::sizeHint(const QStyleOptionViewItem& option,
+                                    const QModelIndex& index) const {
   const auto size = QStyledItemDelegate::sizeHint(option, index);
   return {size.width(), std::max(size.height(), minHeight)};
 }

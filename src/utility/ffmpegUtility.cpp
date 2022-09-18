@@ -1,4 +1,4 @@
-#include "ffmpegUtility.h"
+#include "FFmpegUtility.h"
 #include <QDebug>
 extern "C" {
 #include <libavformat/avformat.h>

@@ -1,11 +1,13 @@
-#include "inputsliderwidget.h"
+#include "InputSliderWidget.h"
+
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSpinBox >
 #include <QString>
 #include <QVBoxLayout>
-#include "utility/styleSheetUtility.h"
+
+#include "utility/StyleSheetUtility.h"
 
 namespace {
 constexpr QSize minSliderSize(100, 30);
@@ -58,18 +60,10 @@ void InputSliderWidget::setLimit(int max) {
   spinBoxMin->setMaximum(max);
 }
 
-void InputSliderWidget::setBegin(int value) {
-  spinBoxMin->setValue(value);
-}
+void InputSliderWidget::setBegin(int value) { spinBoxMin->setValue(value); }
 
-void InputSliderWidget::setEnd(int value) {
-  spinBoxMax->setValue(value);
-}
+void InputSliderWidget::setEnd(int value) { spinBoxMax->setValue(value); }
 
-int InputSliderWidget::getBegin() const {
-  return spinBoxMin->value();
-}
+int InputSliderWidget::getBegin() const { return spinBoxMin->value(); }
 
-int InputSliderWidget::getEnd() const {
-  return spinBoxMax->value();
-}
+int InputSliderWidget::getEnd() const { return spinBoxMax->value(); }
