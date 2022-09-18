@@ -35,11 +35,13 @@ set(PROJECT_SOURCES
         src/utility/multiIndex.h
 )
 
+find_path(SWSCALE_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavcodec NAMES swscale.h)
 find_path(AVCODEC_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavcodec NAMES avcodec.h)
 find_path(AVFORMAT_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavformat NAMES avformat.h)
 find_path(AVUTIL_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavutil NAMES avutil.h)
 find_path(AVDEVICE_INCLUDE_DIR PATHS ${FFmmpeg_INCLUDE}/libavdevice NAMES avdevice.h)
 
+find_library(SWSCALE_LIBRARY PATHS ${FFmmpeg_LIB} NAMES swscale)
 find_library(AVCODEC_LIBRARY PATHS ${FFmmpeg_LIB} NAMES avcodec)
 find_library(AVFORMAT_LIBRARY PATHS ${FFmmpeg_LIB} NAMES avformat)
 find_library(AVUTIL_LIBRARY PATHS ${FFmmpeg_LIB} NAMES avutil)
@@ -49,4 +51,4 @@ add_executable(TgGifToEmoji ${PROJECT_SOURCES} resources.qrc)
 target_include_directories(TgGifToEmoji PRIVATE "src")
 target_include_directories(TgGifToEmoji PRIVATE ${FFmmpeg_INCLUDE})
 target_link_libraries(TgGifToEmoji PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
-target_link_libraries(TgGifToEmoji PRIVATE ${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVUTIL_LIBRARY} ${AVDEVICE_LIBRARY})
+target_link_libraries(TgGifToEmoji PRIVATE ${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVUTIL_LIBRARY} ${AVDEVICE_LIBRARY} ${SWSCALE_LIBRARY})
