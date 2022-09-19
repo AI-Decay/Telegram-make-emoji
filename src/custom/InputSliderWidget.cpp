@@ -40,8 +40,6 @@ InputSliderWidget::InputSliderWidget(QWidget* parent) : QWidget{parent} {
   labelMin->setText(LabelMinText);
   spinBoxMax->setMinimumSize(minSliderSize);
   spinBoxMin->setMinimumSize(minSliderSize);
-  spinBoxMax->setMinimum(0);
-  spinBoxMin->setMinimum(0);
 
   maxLayout->addWidget(labelMax);
   maxLayout->addWidget(spinBoxMax);
@@ -56,8 +54,8 @@ InputSliderWidget::InputSliderWidget(QWidget* parent) : QWidget{parent} {
 }
 
 void InputSliderWidget::setLimit(int max) {
-  spinBoxMax->setMaximum(max);
-  spinBoxMin->setMaximum(max);
+  spinBoxMax->setRange(0, max);
+  spinBoxMin->setRange(0, max);
 }
 
 void InputSliderWidget::setBegin(int value) { spinBoxMin->setValue(value); }

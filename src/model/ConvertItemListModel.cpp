@@ -40,10 +40,10 @@ bool ConvertItemListModel::setData(const QModelIndex& index,
                                    const QVariant& value, int role) {
   if (role == Roles::Progress) {
     const auto progress = value.toInt();
-    if (progress == 100)
-      items.erace(index.row());
-    else
-      items[index.row()].setProgress(value.toInt());
+    //  if (progress == 100)
+    //  items.erace(index.row());
+    //  else
+    items[index.row()].setProgress(progress);
     emit dataChanged(index, index, {role});
     return true;
   } else if (role == Roles::BeginPos) {

@@ -6,9 +6,10 @@
 #include <QLabel>
 #include <QLayout>
 #include <QListView>
-#include <QMovie>
 #include <QPushButton>
 #include <QScreen>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
@@ -21,15 +22,26 @@
 namespace {
 constexpr auto DefaultEndPos = 3000;
 constexpr auto WindowStyle = ":/styles/MainWindowStyles.css";
-constexpr QSize WindowSizeHint(800, 600);
-constexpr auto testGif = ":/images/test.gif";
+constexpr QSize WindowSizeHint(800, 400);
+constexpr QSize ButtonMinSize(200, 50);
+constexpr QSize OperationWidgetMinSize(300, 300);
+constexpr QSize FilesListMinSize(500, 300);
 constexpr auto ConvertButtonText = "Convert";
-constexpr auto SelectPathButtonText = "Select path";
+constexpr auto SelectPathButtonText = "Select output path";
 constexpr auto OutPathLabelObjectName = "OutPathLabel";
+constexpr auto Organization = "AiDecay";
+constexpr auto Application = "TgGifToEmoji";
+constexpr auto OutputPathKey = "OutputPath";
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setStyleSheet(loadStyleSheet(WindowStyle));
+  ;
+  const auto outputPath =
+      QSettings(Organization, Application)
+          .value(OutputPathKey, QStandardPaths::writableLocation(
+                                    QStandardPaths::DesktopLocation))
+          .toString();
 
   convertor = new ToWebmConvertor(this);
   auto* central = new QWidget();
@@ -47,10 +59,38 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   auto* selectPathButton =
       new QPushButton(SelectPathButtonText, operationWidget);
 
+  outPathLabel->setText(outputPath);
+  convertButton->setMinimumSize(ButtonMinSize);
+  outPathLabel->setMinimumSize(ButtonMinSize);
+  selectPathButton->setMinimumSize(ButtonMinSize);
+  operationWidget->setMinimumSize(OperationWidgetMinSize);
+
+  operationLayout->addWidget(convertButton);
+  operationLayout->addStretch(1);
+  operationLayout->addWidget(operationWidget);
+  operationLayout->addWidget(inputWidget);
+  operationLayout->addWidget(outPathLabel);
+  operationLayout->addWidget(selectPathButton);
+
+  operationLayout->setAlignment(Qt::AlignmentFlag::AlignTop);
+
+  files = new QListView(this);
+  files->setModel(new ConvertItemListModel());
+  files->setSelectionMode(QAbstractItemView::SingleSelection);
+  files->setDragEnabled(true);
+  files->viewport()->setAcceptDrops(true);
+  files->setDropIndicatorShown(true);
+  files->setDragDropMode(QAbstractItemView::DropOnly);
+  files->setItemDelegate(new ConvertItemDelegate(files));
+  files->setMinimumSize(FilesListMinSize);
+
   QObject::connect(
       selectPathButton, &QPushButton::clicked, outPathLabel,
       [outPathLabel, this]() {
-        outPathLabel->setText(QFileDialog::getExistingDirectory(this));
+        const auto path = QFileDialog::getExistingDirectory(
+            this, QString(), outPathLabel->text());
+        QSettings(Organization, Application).setValue(OutputPathKey, path);
+        outPathLabel->setText(path);
       });
 
   QObject::connect(
@@ -91,28 +131,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         convertor->push(outPathLabel->text(), std::move(items));
       });
 
-  convertButton->setMinimumSize(200, 50);
-  outPathLabel->setMinimumSize(200, 40);
-  selectPathButton->setMinimumSize(200, 50);
-  operationWidget->setMinimumSize(400, 300);
-
-  operationLayout->addWidget(convertButton);
-  operationLayout->addWidget(operationWidget);
-  operationLayout->addWidget(inputWidget);
-  operationLayout->addWidget(outPathLabel);
-  operationLayout->addWidget(selectPathButton);
-
-  operationLayout->setAlignment(Qt::AlignVCenter);
-
-  files = new QListView(this);
-  files->setModel(new ConvertItemListModel());
-  files->setSelectionMode(QAbstractItemView::SingleSelection);
-  files->setDragEnabled(true);
-  files->viewport()->setAcceptDrops(true);
-  files->setDropIndicatorShown(true);
-  files->setDragDropMode(QAbstractItemView::DropOnly);
-  files->setItemDelegate(new ConvertItemDelegate(files));
-
   QObject::connect(
       convertor, &ToWebmConvertor::updateProgress, files,
       [this](QUuid uuid, int value) {
@@ -127,7 +145,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
       [this, inputWidget](const QModelIndex& current,
                           const QModelIndex& previous) {
         if (previous.isValid()) {
-          qDebug() << previous.row();
           if (auto* model =
                   qobject_cast<ConvertItemListModel*>(files->model())) {
             const auto begin = inputWidget->getBegin();
@@ -161,13 +178,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   central->setLayout(mainLayout);
   setCentralWidget(central);
-
-  auto* labelGif = new QLabel(this);
-  auto* gif = new QMovie(testGif);
-  labelGif->setMovie(gif);
-  gif->start();
-
-  gifLayout->addWidget(labelGif);
   gifLayout->addWidget(files);
   mainLayout->addLayout(gifLayout);
   mainLayout->addLayout(operationLayout);

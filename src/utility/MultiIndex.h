@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QList>
 #include <QUuid>
+#include <mutex>
 
 template <class T>
 class MultiIndex {
