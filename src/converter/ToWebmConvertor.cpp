@@ -4,12 +4,14 @@
 #include <QDir>
 #include <QString>
 #include <QUuid>
+#include <exception>
 #include <future>
 #include <memory>
 extern "C" {
 #include <inttypes.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/timestamp.h>
 #include <libswscale/swscale.h>
@@ -17,36 +19,53 @@ extern "C" {
 
 namespace {
 
-constexpr auto maxDurationMs = 3000;
-constexpr auto maxFileSizeByte = 100000;
-constexpr auto maxWidth = 100;
-constexpr auto maxHeight = 100;
-#ifdef DebugAVPacket
-void dumpAVPacket(AVPacket* pk) {
-  if (!pk) return;
+constexpr auto MaxDurationMs = 3000;
+constexpr auto MaxFileSizeByte = 100000;
+constexpr auto Width = 100;
+constexpr auto Height = 100;
+constexpr auto OutputExtension = ".webm";
+constexpr auto VideoCodec = "libvpx-vp9";
 
-  qDebug() << "dts: " << pk->dts << "duration: " << pk->duration
-           << "flags: " << pk->flags << "pos: " << pk->pos << "pts: " << pk->pts
-           << "side_data_elems: " << pk->side_data_elems << "size: " << pk->size
-           << "time_base.den: " << pk->time_base.den
-           << "time_base.num: " << pk->time_base.num;
-}
-#endif
+constexpr auto OpenOutputFileException = "Failed to opening output file";
+constexpr auto WriteHeaderFileException = "Failed to write header output file";
+constexpr auto AllocateAVFrameException =
+    "Failed to allocated memory for AVFrame";
+constexpr auto AllocateAVPacketException =
+    "Failed to allocated memory for AVPacket";
+constexpr auto AllocateOutputFormatException =
+    "Failed to allocated memory for output format";
+constexpr auto AllocateAVFormatContextException =
+    "Failed to allocated memory for AVFormat context";
+constexpr auto AllocateCodecContextException =
+    "Failed to allocated memory for codec context";
+constexpr auto FindCodecException = "Failed to find the proper codec";
+constexpr auto OpenCodecException = "Failed to open the codec";
+constexpr auto FillCodecContextException = "Failed to fill codec context";
+constexpr auto OpenInputFileException = "Failed to open input file";
+constexpr auto FindStreamInfoException = "Failed to get find info";
+constexpr auto ReceivingPacketEncoderException =
+    "Failed to receiving packet from encoder";
+constexpr auto ReceivingPacketDecoderException =
+    "Failed to receiving packet from decoder";
+constexpr auto SendongPacketDecoderException =
+    "Error while sending packet to decoder";
+constexpr auto ReceivingFrameDecoderException =
+    "Error while receiving frame from decoder";
 
 struct StreamingParams {
-  std::string output_extension;
-  std::string muxer_opt_key;
-  std::string muxer_opt_value;
-  std::string video_codec;
-  std::string codec_priv_key;
-  std::string codec_priv_value;
+  std::string outputExtension;
+  std::string muxerOptKey;
+  std::string muxerOptValue;
+  std::string videoCodec;
+  std::string codecPrivKey;
+  std::string codecPrivValue;
 };
 
 struct StreamingContext {
-  AVFormatContext* avfc = nullptr;
-  AVCodec* video_avc = nullptr;
-  AVStream* video_avs = nullptr;
-  AVCodecContext* video_avcc = nullptr;
+  AVFormatContext* formatContext = nullptr;
+  AVCodec* codec = nullptr;
+  AVStream* stream = nullptr;
+  AVCodecContext* codecContext = nullptr;
   int video_index = 0;
   std::string filename;
 };
@@ -54,237 +73,353 @@ struct StreamingContext {
 struct StreamingContextDeleter {
   void operator()(StreamingContext* context) {
     if (context) {
-      auto* avfc = &context->avfc;
-      auto* avcc = &context->video_avcc;
-      if (avfc) avformat_close_input(avfc);
-      if (avcc) avcodec_free_context(avcc);
-      if (context->avfc) avformat_free_context(context->avfc);
+      auto* avfc = &context->formatContext;
+      auto* avcc = &context->codecContext;
+      if (avfc)
+        avformat_close_input(avfc);
+      if (avcc)
+        avcodec_free_context(avcc);
+      if (context->formatContext)
+        avformat_free_context(context->formatContext);
     }
   }
 };
 
 struct AVFrameDeleter {
   void operator()(AVFrame* frame) {
-    if (frame) av_frame_free(&frame);
+    if (frame)
+      av_frame_free(&frame);
   }
 };
 
 struct AVPacketDeleter {
   void operator()(AVPacket* packet) {
-    if (packet) av_packet_free(&packet);
+    if (packet)
+      av_packet_free(&packet);
   }
 };
 
 struct SwsContextDeleter {
   void operator()(SwsContext* context) {
-    if (context) sws_freeContext(context);
+    if (context)
+      sws_freeContext(context);
   }
 };
 
 struct AVDictionaryDeleter {
   void operator()(AVDictionary* dictionary) {
-    if (dictionary) av_dict_free(&dictionary);
+    if (dictionary)
+      av_dict_free(&dictionary);
   }
 };
 
-QString getResponse(int code) {
+std::string getResponse(int code) {
   char error[AV_ERROR_MAX_STRING_SIZE];
   av_make_error_string(error, AV_ERROR_MAX_STRING_SIZE, code);
-  return QString(error);
+  return std::string(error);
 }
 
-int fill_stream_info(AVStream* avs, AVCodec** avc, AVCodecContext** avcc) {
-  *avc = const_cast<AVCodec*>(avcodec_find_decoder(avs->codecpar->codec_id));
-  if (!*avc) {
-    qDebug() << "failed to find the codec";
-    return -1;
-  }
+using ContextPtr = std::unique_ptr<StreamingContext, StreamingContextDeleter>;
 
-  *avcc = avcodec_alloc_context3(*avc);
-  if (!*avcc) {
-    qDebug() << "failed to alloc memory for codec context";
-    return -1;
-  }
+class VideoTranscoder : public QObject {
+  Q_OBJECT
+  using AVFramePtr = std::unique_ptr<AVFrame, AVFrameDeleter>;
+  using AVPacketPtr = std::unique_ptr<AVPacket, AVPacketDeleter>;
+  using SwsContextPtr = std::unique_ptr<SwsContext, SwsContextDeleter>;
 
-  if (avcodec_parameters_to_context(*avcc, avs->codecpar) < 0) {
-    qDebug() << "failed to fill codec context";
-    return -1;
-  }
+ signals:
+  void updateProgress(QUuid taskId, int progress);
 
-  if (avcodec_open2(*avcc, *avc, nullptr) < 0) {
-    qDebug() << "failed to open codec";
-    return -1;
-  }
-  return 0;
-}
+ public:
+  VideoTranscoder(ContextPtr encoder, ContextPtr decoder)
+      : _encoder(std::move(encoder)), _decoder(std::move(decoder)) {}
 
-int open_media(const char* in_filename, AVFormatContext** avfc) {
-  *avfc = avformat_alloc_context();
-  if (!*avfc) {
-    qDebug() << "failed to alloc memory for format";
-    return -1;
-  }
+  void process(const VideoProp& input) {
+    AVDictionary* muxer_opts = nullptr;
 
-  if (avformat_open_input(avfc, in_filename, nullptr, nullptr) != 0) {
-    qDebug() << "failed to open input file " << in_filename;
-    return -1;
-  }
+    /*if (!sp.muxer_opt_key.empty() && !sp.muxer_opt_value.empty()) {
+      av_dict_set(&muxer_opts, sp.muxer_opt_key.c_str(),
+                  sp.muxer_opt_value.c_str(), 0);
+    }*/
 
-  if (avformat_find_stream_info(*avfc, nullptr) < 0) {
-    qDebug() << "failed to get stream info";
-    return -1;
-  }
+    open_media();
+    prepare_decoder();
+    prepare_video_encoder();
 
-  // av_dump_format(*avfc, 0, in_filename, 0);
-  return 0;
-}
+    if (avformat_write_header(_encoder->formatContext, &muxer_opts) < 0) {
+      throw std::exception(WriteHeaderFileException);
+    }
 
-int prepare_decoder(std::shared_ptr<StreamingContext> sc) {
-  for (int i = 0; i < sc->avfc->nb_streams; i++) {
-    if (sc->avfc->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-      sc->video_avs = sc->avfc->streams[i];
-      sc->video_index = i;
+    auto inputFrame = AVFramePtr(av_frame_alloc());
+    if (!inputFrame) {
+      throw std::exception(AllocateAVFrameException);
+    }
 
-      if (fill_stream_info(sc->video_avs, &sc->video_avc, &sc->video_avcc)) {
-        return -1;
+    auto inputPacket = AVPacketPtr(av_packet_alloc());
+    if (!inputPacket) {
+      throw std::exception(AllocateAVPacketException);
+    }
+
+    auto scaleContext = SwsContextPtr(sws_getContext(
+        _decoder->codecContext->width, _decoder->codecContext->height,
+        _decoder->codecContext->pix_fmt, Width, Height,
+        _encoder->codecContext->pix_fmt, SWS_SPLINE, nullptr, nullptr,
+        nullptr));
+
+    auto** streams = _decoder->formatContext->streams;
+
+    _fps = static_cast<double>(
+               streams[inputPacket->stream_index]->avg_frame_rate.num) /
+           streams[inputPacket->stream_index]->avg_frame_rate.den;
+    const int64_t beginFrame = input.beginPosMs * _fps / 1000;
+    const int64_t endFrame = input.endPosMs * _fps / 1000;
+    const int64_t totalFrames = endFrame - beginFrame;
+
+    int64_t count = 0;
+    int progress = 0;
+
+    int64_t startTime =
+        av_rescale_q(input.beginPosMs * AV_TIME_BASE / 1000, {1, AV_TIME_BASE},
+                     _decoder->stream->time_base);
+
+    if (startTime > 0) {
+      av_seek_frame(_decoder->formatContext, inputPacket->stream_index,
+                    startTime, 0);
+      avcodec_flush_buffers(_decoder->codecContext);
+    }
+
+    while (count < totalFrames &&
+           av_read_frame(_decoder->formatContext, inputPacket.get()) >= 0) {
+      const auto codec_type =
+          streams[inputPacket->stream_index]->codecpar->codec_type;
+
+      if (codec_type == AVMEDIA_TYPE_VIDEO) {
+        transcode_video(inputPacket.get(), inputFrame.get(),
+                        scaleContext.get());
+
+        if (const auto pg = (count * 100) / totalFrames; pg != progress) {
+          progress = pg;
+          emit updateProgress(input.uuid, progress);
+        }
+
+        ++count;
       }
-    } else {
-      qDebug() << "skipping streams other than audio and video";
+      av_packet_unref(inputPacket.get());
+    }
+
+    encode_video(nullptr, nullptr);
+    av_write_trailer(_encoder->formatContext);
+
+    emit updateProgress(input.uuid, 100);
+  }
+
+ private:
+  void prepare_decoder() {
+    for (int i = 0; i < _decoder->formatContext->nb_streams; i++) {
+      if (_decoder->formatContext->streams[i]->codecpar->codec_type ==
+          AVMEDIA_TYPE_VIDEO) {
+        _decoder->stream = _decoder->formatContext->streams[i];
+        _decoder->video_index = i;
+
+        fill_stream_info(_decoder->stream, &_decoder->codec,
+                         &_decoder->codecContext);
+      }
     }
   }
 
-  return 0;
-}
-
-int prepare_video_encoder(std::shared_ptr<StreamingContext> sc,
-                          AVCodecContext* decoder_ctx,
-                          AVRational input_framerate,
-                          const StreamingParams& sp) {
-  sc->video_avs = avformat_new_stream(sc->avfc, nullptr);
-
-  sc->video_avc = const_cast<AVCodec*>(
-      avcodec_find_encoder_by_name(sp.video_codec.c_str()));
-  if (!sc->video_avc) {
-    qDebug() << "could not find the proper codec";
-    return -1;
-  }
-
-  sc->video_avcc = avcodec_alloc_context3(sc->video_avc);
-  if (!sc->video_avcc) {
-    qDebug() << "could not allocated memory for codec context";
-    return -1;
-  }
-
-  av_opt_set(sc->video_avcc->priv_data, "preset", "fast", 0);
-  if (!sp.codec_priv_key.empty() && !sp.codec_priv_value.empty())
-    av_opt_set(sc->video_avcc->priv_data, sp.codec_priv_key.c_str(),
-               sp.codec_priv_value.c_str(), 0);
-
-  sc->video_avcc->height = maxHeight;
-  sc->video_avcc->width = maxWidth;
-  sc->video_avcc->sample_aspect_ratio = decoder_ctx->sample_aspect_ratio;
-  if (sc->video_avc->pix_fmts)
-    sc->video_avcc->pix_fmt = sc->video_avc->pix_fmts[0];
-  else
-    sc->video_avcc->pix_fmt = decoder_ctx->pix_fmt;
-
-  constexpr int64_t maxBitrate = maxFileSizeByte / (maxDurationMs / 1000.0) - 1;
-
-  sc->video_avcc->bit_rate = maxBitrate;
-  sc->video_avcc->rc_buffer_size = maxFileSizeByte;
-  sc->video_avcc->rc_max_rate = maxBitrate;
-  sc->video_avcc->rc_min_rate = maxBitrate;
-  sc->video_avcc->time_base = av_inv_q(input_framerate);
-  sc->video_avs->time_base = sc->video_avcc->time_base;
-
-  if (avcodec_open2(sc->video_avcc, sc->video_avc, nullptr) < 0) {
-    qDebug() << "could not open the codec";
-    return -1;
-  }
-  avcodec_parameters_from_context(sc->video_avs->codecpar, sc->video_avcc);
-
-  return 0;
-}
-
-int encode_video(std::shared_ptr<StreamingContext> decoder,
-                 std::shared_ptr<StreamingContext> encoder,
-                 AVFrame* input_frame, SwsContext* scale) {
-  if (input_frame) input_frame->pict_type = AV_PICTURE_TYPE_NONE;
-
-  AVPacket* output_packet = av_packet_alloc();
-  if (!output_packet) {
-    qDebug() << "could not allocate memory for output packet";
-    return -1;
-  }
-
-  if (input_frame && scale) {
-    sws_scale(scale, input_frame->data, input_frame->linesize, 0,
-              decoder->video_avcc->height, input_frame->data,
-              input_frame->linesize);
-  }
-
-  int response = avcodec_send_frame(encoder->video_avcc, input_frame);
-
-  while (response >= 0) {
-    response = avcodec_receive_packet(encoder->video_avcc, output_packet);
-    if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
-      break;
-    } else if (response < 0) {
-      qDebug() << "Error while receiving packet from encoder: "
-               << getResponse(response);
-      return -1;
+  void prepare_video_encoder() {
+    avformat_alloc_output_context2(&_encoder->formatContext, nullptr, nullptr,
+                                   _encoder->filename.c_str());
+    if (!_encoder->formatContext) {
+      throw std::exception(AllocateOutputFormatException);
     }
 
-    output_packet->stream_index = decoder->video_index;
-    output_packet->duration = encoder->video_avs->time_base.den /
-                              encoder->video_avs->time_base.num /
-                              decoder->video_avs->avg_frame_rate.num *
-                              decoder->video_avs->avg_frame_rate.den;
+    AVRational input_framerate =
+        av_guess_frame_rate(_decoder->formatContext, _decoder->stream, nullptr);
 
-    av_packet_rescale_ts(output_packet, decoder->video_avs->time_base,
-                         encoder->video_avs->time_base);
+    _encoder->stream = avformat_new_stream(_encoder->formatContext, nullptr);
 
-    response = av_interleaved_write_frame(encoder->avfc, output_packet);
-    if (response != 0) {
-      qDebug() << "Error while receiving packet from decoder: " << response
-               << getResponse(response);
-      return -1;
-    }
-  }
-  av_packet_unref(output_packet);
-  av_packet_free(&output_packet);
-  return 0;
-}
-
-int transcode_video(std::shared_ptr<StreamingContext> decoder,
-                    std::shared_ptr<StreamingContext> encoder,
-                    AVPacket* input_packet, AVFrame* input_frame,
-                    SwsContext* scale) {
-  int response = avcodec_send_packet(decoder->video_avcc, input_packet);
-  if (response < 0) {
-    qDebug() << "Error while sending packet to decoder: "
-             << getResponse(response);
-    return response;
-  }
-
-  while (response >= 0) {
-    response = avcodec_receive_frame(decoder->video_avcc, input_frame);
-    if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
-      break;
-    } else if (response < 0) {
-      qDebug() << "Error while receiving frame from decoder: "
-               << getResponse(response);
-      return response;
+    _encoder->codec =
+        const_cast<AVCodec*>(avcodec_find_encoder_by_name(VideoCodec));
+    if (!_encoder->codec) {
+      throw std::exception(FindCodecException);
     }
 
-    if (response >= 0) {
-      if (encode_video(decoder, encoder, input_frame, scale)) return -1;
+    _encoder->codecContext = avcodec_alloc_context3(_encoder->codec);
+    if (!_encoder->codecContext) {
+      throw std::exception(AllocateCodecContextException);
     }
-    av_frame_unref(input_frame);
+
+    if (_encoder->codecContext->codec_id == AV_CODEC_ID_H264)
+      av_opt_set(_encoder->codecContext->priv_data, "preset", "slow", 0);
+    else
+      av_opt_set(_encoder->codecContext->priv_data, "preset", "fast", 0);
+
+    _encoder->codecContext->height = Height;
+    _encoder->codecContext->width = Width;
+    _encoder->codecContext->sample_aspect_ratio = {Width, Height};
+    if (_encoder->codec->pix_fmts)
+      _encoder->codecContext->pix_fmt = _encoder->codec->pix_fmts[0];
+    else
+      _encoder->codecContext->pix_fmt = _decoder->codecContext->pix_fmt;
+
+    constexpr int64_t maxBitrate =
+        MaxFileSizeByte / (MaxDurationMs / 1000.0) - 1;
+
+    _encoder->codecContext->max_b_frames = _decoder->codecContext->max_b_frames;
+    _encoder->codecContext->bit_rate =
+        std::min(maxBitrate, _decoder->codecContext->bit_rate);
+    _encoder->codecContext->rc_buffer_size = MaxFileSizeByte;
+    _encoder->codecContext->rc_max_rate =
+        std::min(maxBitrate, _decoder->codecContext->rc_max_rate);
+    _encoder->codecContext->rc_min_rate =
+        std::min(maxBitrate, _decoder->codecContext->rc_min_rate);
+    _encoder->codecContext->time_base = av_inv_q(input_framerate);
+    _encoder->stream->time_base = _encoder->codecContext->time_base;
+
+    if (avcodec_open2(_encoder->codecContext, _encoder->codec, nullptr) < 0) {
+      throw std::exception(OpenCodecException);
+    }
+    avcodec_parameters_from_context(_encoder->stream->codecpar,
+                                    _encoder->codecContext);
+
+    if (_encoder->formatContext->oformat->flags & AVFMT_GLOBALHEADER)
+      _encoder->formatContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    if (!(_encoder->formatContext->oformat->flags & AVFMT_NOFILE)) {
+      if (avio_open(&_encoder->formatContext->pb, _encoder->filename.c_str(),
+                    AVIO_FLAG_WRITE) < 0) {
+        throw std::exception(OpenOutputFileException);
+      }
+    }
   }
 
-  return 0;
-}
+  void fill_stream_info(AVStream* avs, AVCodec** avc, AVCodecContext** avcc) {
+    *avc = const_cast<AVCodec*>(avcodec_find_decoder(avs->codecpar->codec_id));
+    if (!*avc) {
+      throw std::exception(FindCodecException);
+    }
+
+    *avcc = avcodec_alloc_context3(*avc);
+    if (!*avcc) {
+      throw std::exception(AllocateCodecContextException);
+    }
+
+    if (avcodec_parameters_to_context(*avcc, avs->codecpar) < 0) {
+      throw std::exception(FillCodecContextException);
+    }
+
+    if (avcodec_open2(*avcc, *avc, nullptr) < 0) {
+      throw std::exception(OpenCodecException);
+    }
+  }
+
+  void open_media() {
+    auto** avfc = &_decoder->formatContext;
+    *avfc = avformat_alloc_context();
+    if (!*avfc) {
+      throw std::exception(AllocateAVFormatContextException);
+    }
+
+    if (avformat_open_input(avfc, _decoder->filename.c_str(), nullptr,
+                            nullptr) != 0) {
+      throw std::exception(OpenInputFileException);
+    }
+
+    if (avformat_find_stream_info(*avfc, nullptr) < 0) {
+      throw std::exception(FindStreamInfoException);
+    }
+  }
+
+  void encode_video(AVFrame* input_frame, SwsContext* scale) {
+    if (input_frame) {
+      input_frame->pict_type = AV_PICTURE_TYPE_NONE;
+    }
+
+    AVPacket* output_packet = av_packet_alloc();
+    if (!output_packet) {
+      throw std::exception(AllocateAVPacketException);
+    }
+
+    AVFrame* scaledFrame = nullptr;
+
+    if (input_frame && scale) {
+      // Some artifacts during scalling TODO FIX
+
+      // scaledFrame = av_frame_alloc();
+      // scaledFrame->pict_type = input_frame->pict_type;
+      // const auto pixFormat = static_cast<AVPixelFormat>(input_frame->format);
+      // auto* out_buffer = (unsigned char*)av_malloc(
+      //     av_image_get_buffer_size(pixFormat, Width, Height, 1));
+      // av_image_fill_arrays(scaledFrame->data, scaledFrame->linesize,
+      // out_buffer,
+      //                      pixFormat, Width, Height, 1);
+
+      sws_scale(scale, input_frame->data, input_frame->linesize, 0,
+                _decoder->codecContext->height, input_frame->data,
+                input_frame->linesize);
+    }
+
+    int response = avcodec_send_frame(_encoder->codecContext, input_frame);
+
+    while (response >= 0) {
+      response = avcodec_receive_packet(_encoder->codecContext, output_packet);
+      if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
+        break;
+      } else if (response < 0) {
+        throw std::exception(ReceivingPacketDecoderException);
+      }
+
+      const auto frameDuration = _decoder->stream->time_base.den / _fps;
+      const int64_t frameTime = current_frame * frameDuration;
+      output_packet->pts = frameTime / _decoder->stream->time_base.num;
+      output_packet->duration = frameDuration;
+      output_packet->dts = output_packet->pts;
+      output_packet->stream_index = _decoder->stream->index;
+      av_packet_rescale_ts(output_packet, _decoder->stream->time_base,
+                           _encoder->stream->time_base);
+
+      ++current_frame;
+
+      response =
+          av_interleaved_write_frame(_encoder->formatContext, output_packet);
+      if (response != 0) {
+        throw std::exception(ReceivingPacketDecoderException);
+      }
+    }
+    av_packet_unref(output_packet);
+    av_packet_free(&output_packet);
+  }
+
+  void transcode_video(AVPacket* input_packet,
+                       AVFrame* input_frame,
+                       SwsContext* scale) {
+    int response = avcodec_send_packet(_decoder->codecContext, input_packet);
+    if (response < 0) {
+      throw std::exception(SendongPacketDecoderException);
+    }
+
+    while (response >= 0) {
+      response = avcodec_receive_frame(_decoder->codecContext, input_frame);
+      if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
+        break;
+      } else if (response < 0) {
+        throw std::exception(ReceivingFrameDecoderException);
+      }
+
+      if (response >= 0) {
+        encode_video(input_frame, scale);
+      }
+      av_frame_unref(input_frame);
+    }
+  }
+
+ private:
+  ContextPtr _encoder = nullptr;
+  ContextPtr _decoder = nullptr;
+  size_t current_frame = 0;
+  double _fps = 0;
+};
 
 }  // namespace
 
@@ -298,139 +433,30 @@ void ToWebmConvertor::push(QString output, std::vector<VideoProp> input) {
 }
 
 int ToWebmConvertor::convert(VideoProp input, QString output) {
-  if (input.beginPosMs >= input.endPosMs) {
-    qDebug() << "incorrect pos, begin >= end";
-    return -1;
-  }
-
-  StreamingParams sp;
-  sp.output_extension = ".webm";
-  sp.video_codec = "libvpx-vp9";
-
   auto inputStd = input.path.toStdString();
   auto outputStd =
       (output + '/' + QUuid::createUuid().toString(QUuid::StringFormat::Id128))
           .toStdString() +
-      sp.output_extension;
+      OutputExtension;
 
-  auto decoder = std::shared_ptr<StreamingContext>(new StreamingContext,
-                                                   StreamingContextDeleter{});
-  auto encoder = std::shared_ptr<StreamingContext>(new StreamingContext,
-                                                   StreamingContextDeleter{});
+  auto decoder = ContextPtr(new StreamingContext);
+  auto encoder = ContextPtr(new StreamingContext);
 
   encoder->filename = std::move(outputStd);
   decoder->filename = std::move(inputStd);
 
-  if (open_media(decoder->filename.c_str(), &decoder->avfc)) return -1;
-  if (prepare_decoder(decoder)) return -1;
+  VideoTranscoder transcoder(std::move(encoder), std::move(decoder));
+  QObject::connect(&transcoder, &VideoTranscoder::updateProgress, this,
+                   &ToWebmConvertor::updateProgress);
 
-  avformat_alloc_output_context2(&encoder->avfc, nullptr, nullptr,
-                                 encoder->filename.c_str());
-  if (!encoder->avfc) {
-    qDebug() << "could not allocate memory for output format";
+  try {
+    transcoder.process(input);
+  } catch (std::exception& ex) {
+    qDebug() << ex.what();
     return -1;
+    emit updateProgress(input.uuid, 0);
   }
-
-  AVRational input_framerate =
-      av_guess_frame_rate(decoder->avfc, decoder->video_avs, nullptr);
-  prepare_video_encoder(encoder, decoder->video_avcc, input_framerate, sp);
-
-  if (encoder->avfc->oformat->flags & AVFMT_GLOBALHEADER)
-    encoder->avfc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-  // INVESTIGATE
-  if (!(encoder->avfc->oformat->flags & AVFMT_NOFILE)) {
-    if (avio_open(&encoder->avfc->pb, encoder->filename.c_str(),
-                  AVIO_FLAG_WRITE) < 0) {
-      qDebug() << "could not open the output file";
-      return -1;
-    }
-  }
-
-  AVDictionary* muxer_opts = nullptr;
-
-  if (!sp.muxer_opt_key.empty() && !sp.muxer_opt_value.empty()) {
-    av_dict_set(&muxer_opts, sp.muxer_opt_key.c_str(),
-                sp.muxer_opt_value.c_str(), 0);
-  }
-
-  if (avformat_write_header(encoder->avfc, &muxer_opts) < 0) {
-    qDebug() << "an error occurred when opening output file";
-    return -1;
-  }
-
-  auto inputFrame = std::unique_ptr<AVFrame, AVFrameDeleter>(av_frame_alloc());
-  if (!inputFrame) {
-    qDebug() << "failed to allocated memory for AVFrame";
-    return -1;
-  }
-
-  auto inputPacket =
-      std::unique_ptr<AVPacket, AVPacketDeleter>(av_packet_alloc());
-  if (!inputPacket) {
-    qDebug() << "failed to allocated memory for AVPacket";
-    return -1;
-  }
-
-  auto scaleContext =
-      std::unique_ptr<SwsContext, SwsContextDeleter>(sws_getContext(
-          decoder->video_avcc->width, decoder->video_avcc->height,
-          decoder->video_avcc->pix_fmt, maxWidth, maxHeight,
-          encoder->video_avcc->pix_fmt, SWS_SPLINE, nullptr, nullptr, nullptr));
-
-  auto** streams = decoder->avfc->streams;
-
-  const auto fps = static_cast<double>(
-                       streams[inputPacket->stream_index]->avg_frame_rate.num) /
-                   streams[inputPacket->stream_index]->avg_frame_rate.den;
-  const size_t beginFrame = input.beginPosMs * fps / 1000;
-  const size_t endFrame = input.endPosMs * fps / 1000;
-  const auto totalFrames = endFrame - beginFrame;
-
-  size_t count = 0;
-  int progress = 0;
-
-  int64_t startTime =
-      av_rescale_q(input.beginPosMs * AV_TIME_BASE / 1000, {1, AV_TIME_BASE},
-                   decoder->video_avs->time_base);
-
-  av_seek_frame(decoder->avfc, inputPacket->stream_index, startTime, 0);
-  avcodec_flush_buffers(decoder->video_avcc);
-
-  // Note: Important to calculate manually and set pts, duration, dts because we
-  // did av_seek_frame
-  const int64_t frameDuration =
-      decoder->video_avs->time_base.den /
-      (input_framerate.num / static_cast<double>(input_framerate.den));
-
-  while (count < totalFrames &&
-         av_read_frame(decoder->avfc, inputPacket.get()) >= 0) {
-    if (streams[inputPacket->stream_index]->codecpar->codec_type ==
-        AVMEDIA_TYPE_VIDEO) {
-      const int64_t frameTime = count * frameDuration;
-      inputPacket->pts = frameTime / decoder->video_avs->time_base.num;
-      inputPacket->duration = frameDuration;
-      inputPacket->dts = inputPacket->pts;
-
-      if (transcode_video(decoder, encoder, inputPacket.get(), inputFrame.get(),
-                          scaleContext.get())) {
-        return -1;
-      }
-      if (const auto pg = (count * 100) / totalFrames; pg != progress) {
-        progress = pg;
-        emit updateProgress(input.uuid, progress);
-      }
-      ++count;
-    }
-    av_packet_unref(inputPacket.get());
-  }
-
-  if (encode_video(decoder, encoder, nullptr, nullptr)) {
-    return -1;
-  }
-
-  emit updateProgress(input.uuid, 100);
-
-  av_write_trailer(encoder->avfc);
 
   return 0;
 }
+#include "ToWebmConvertor.moc"
