@@ -1,13 +1,11 @@
 cmake_minimum_required(VERSION 3.18)
-set(FFmmpeg_PATH "E:/Libs/FFmpeg")
+set(FFmmpeg_PATH "D:/Libs/FFmpeg")
 set(FFmmpeg_INCLUDE "${FFmmpeg_PATH}/include")
 set(FFmmpeg_LIB "${FFmmpeg_PATH}/bin")
 
 project(TgGifToEmoji VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_CXX_FLAGS "-D__STDC_CONSTANT_MACROS")
-
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
