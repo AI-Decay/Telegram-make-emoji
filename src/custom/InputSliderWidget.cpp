@@ -10,7 +10,7 @@
 #include "utility/StyleSheetUtility.h"
 
 namespace {
-constexpr QSize minSliderSize(100, 30);
+constexpr QSize MinSliderSize(100, 30);
 constexpr auto InputSliderWidgetStyle = ":/styles/InputSliderWidgetStyle.css";
 constexpr auto LabelMaxText = "End position in ms";
 constexpr auto LabelMinText = "Begin position in ms";
@@ -38,8 +38,8 @@ InputSliderWidget::InputSliderWidget(QWidget* parent) : QWidget{parent} {
 
   labelMax->setText(LabelMaxText);
   labelMin->setText(LabelMinText);
-  spinBoxMax->setMinimumSize(minSliderSize);
-  spinBoxMin->setMinimumSize(minSliderSize);
+  spinBoxMax->setMinimumSize(MinSliderSize);
+  spinBoxMin->setMinimumSize(MinSliderSize);
 
   maxLayout->addWidget(labelMax);
   maxLayout->addWidget(spinBoxMax);
@@ -58,8 +58,16 @@ void InputSliderWidget::setLimit(int max) {
   spinBoxMin->setRange(0, max);
 }
 
-void InputSliderWidget::setBegin(int value) { spinBoxMin->setValue(value); }
-void InputSliderWidget::setEnd(int value) { spinBoxMax->setValue(value); }
+void InputSliderWidget::setBegin(int value) {
+  spinBoxMin->setValue(value);
+}
+void InputSliderWidget::setEnd(int value) {
+  spinBoxMax->setValue(value);
+}
 
-int InputSliderWidget::getBegin() const { return spinBoxMin->value(); }
-int InputSliderWidget::getEnd() const { return spinBoxMax->value(); }
+int InputSliderWidget::getBegin() const {
+  return spinBoxMin->value();
+}
+int InputSliderWidget::getEnd() const {
+  return spinBoxMax->value();
+}

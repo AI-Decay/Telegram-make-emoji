@@ -3,7 +3,7 @@ set(FFmmpeg_PATH "D:/Libs/FFmpeg")
 set(FFmmpeg_INCLUDE "${FFmmpeg_PATH}/include")
 set(FFmmpeg_LIB "${FFmmpeg_PATH}/bin")
 
-project(TgGifToEmoji VERSION 0.1 LANGUAGES CXX)
+project(TgCreateEmoji VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOUIC ON)

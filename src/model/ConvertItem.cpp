@@ -1,7 +1,13 @@
 #include "ConvertItem.h"
 
+namespace {
+const auto DefaultEndPos = 3000;
+}
+
 ConvertItem::ConvertItem(QString fileName, int64_t durationMs)
-    : _fileName(fileName), _durationMs(durationMs) {}
+    : _fileName(fileName), _durationMs(durationMs) {
+  _endPosMs = std::min(static_cast<int64_t>(DefaultEndPos), durationMs);
+}
 
 QString ConvertItem::getFileName() const {
   return _fileName;

@@ -37,13 +37,10 @@ QVariant ConvertItemListModel::data(const QModelIndex& index, int role) const {
 }
 
 bool ConvertItemListModel::setData(const QModelIndex& index,
-                                   const QVariant& value, int role) {
+                                   const QVariant& value,
+                                   int role) {
   if (role == Roles::Progress) {
-    const auto progress = value.toInt();
-    //  if (progress == 100)
-    //  items.erace(index.row());
-    //  else
-    items[index.row()].setProgress(progress);
+    items[index.row()].setProgress(value.toInt());
     emit dataChanged(index, index, {role});
     return true;
   } else if (role == Roles::BeginPos) {
@@ -55,6 +52,15 @@ bool ConvertItemListModel::setData(const QModelIndex& index,
   }
 
   return QAbstractListModel::setData(index, value, role);
+}
+
+bool ConvertItemListModel::removeRows(int row, int count, const QModelIndex&) {
+  for (int i = row; i < count; ++i) {
+    items.erace(row);
+  }
+
+  emit dataChanged(index(row), index(count));
+  return true;
 }
 
 void ConvertItemListModel::updateProgress(QUuid uuid, int value) {
@@ -70,8 +76,10 @@ Qt::DropActions ConvertItemListModel::supportedDropActions() const {
 }
 
 bool ConvertItemListModel::dropMimeData(const QMimeData* data,
-                                        Qt::DropAction action, int row,
-                                        int column, const QModelIndex& parent) {
+                                        Qt::DropAction action,
+                                        int row,
+                                        int column,
+                                        const QModelIndex& parent) {
   Q_UNUSED(row);
   Q_UNUSED(column);
   Q_UNUSED(action);
@@ -101,7 +109,8 @@ bool ConvertItemListModel::dropMimeData(const QMimeData* data,
 }
 
 bool ConvertItemListModel::canDropMimeData(const QMimeData* data,
-                                           Qt::DropAction action, int row,
+                                           Qt::DropAction action,
+                                           int row,
                                            int column,
                                            const QModelIndex& parent) const {
   return true;

@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <QDebug>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QItemSelectionModel>
@@ -12,6 +13,7 @@
 #include <QStandardPaths>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
+#include <algorithm>
 
 #include "converter/ToWebmConvertor.h"
 #include "custom/InputSliderWidget.h"
@@ -95,7 +97,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
   QObject::connect(
       convertButton, &QPushButton::clicked, outPathLabel,
-      [inputWidget, outPathLabel, this]() {
+      [convertButton, inputWidget, outPathLabel, this]() {
         const auto count = files->model()->rowCount();
         std::vector<VideoProp> items;
         items.reserve(count);
@@ -120,8 +122,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             end = std::min(
                 index.data(ConvertItemListModel::Roles::Duration).toInt(),
                 DefaultEndPos);
+          const auto uuid =
+              index.data(ConvertItemListModel::Roles::Uuid).toUuid();
+          session.insert(uuid, false);
           items.push_back({
-              index.data(ConvertItemListModel::Roles::Uuid).toUuid(),
+              uuid,
               index.data(Qt::DisplayRole).toString(),
               begin,
               end,
@@ -129,14 +134,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         }
 
         convertor->push(outPathLabel->text(), std::move(items));
+        convertButton->setEnabled(false);
       });
 
   QObject::connect(
       convertor, &ToWebmConvertor::updateProgress, files,
-      [this](QUuid uuid, int value) {
+      [convertButton, this](QUuid uuid, int value) {
         if (auto* model = qobject_cast<ConvertItemListModel*>(files->model())) {
           const auto index = model->getIndexForUuid(uuid);
           model->setData(index, value, ConvertItemListModel::Roles::Progress);
+          if (value == 100 || value == -1) {
+            session[uuid] = true;
+            const auto isAllReady =
+                std::all_of(session.begin(), session.end(),
+                            [](const auto pair) { return pair; });
+            if (isAllReady) {
+              model->removeRows(0, session.size());
+              convertButton->setEnabled(true);
+            }
+          }
         }
       });
 
@@ -188,4 +204,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
 MainWindow::~MainWindow() {}
 
-QSize MainWindow::sizeHint() const { return WindowSizeHint; }
+QSize MainWindow::sizeHint() const {
+  return WindowSizeHint;
+}

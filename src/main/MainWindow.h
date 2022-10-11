@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QHash>
 #include <QMainWindow>
 
 class QListView;
@@ -17,5 +18,6 @@ class MainWindow : public QMainWindow {
  private:
   QListView* files;
   ToWebmConvertor* convertor;
+  QHash<QUuid, bool> session;
 };
 #endif  // MAINWINDOW_H
