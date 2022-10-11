@@ -113,10 +113,10 @@ struct AVDictionaryDeleter {
   }
 };
 
-std::string getResponse(int code) {
+QString getResponse(int code) {
   char error[AV_ERROR_MAX_STRING_SIZE];
   av_make_error_string(error, AV_ERROR_MAX_STRING_SIZE, code);
-  return std::string(error);
+  return QString(error);
 }
 
 using ContextPtr = std::unique_ptr<StreamingContext, StreamingContextDeleter>;
@@ -331,9 +331,9 @@ class VideoTranscoder : public QObject {
     }
   }
 
-  void encode_video(AVFrame* input_frame, SwsContext* scale) {
-    if (input_frame) {
-      input_frame->pict_type = AV_PICTURE_TYPE_NONE;
+  void encode_video(AVFrame* inputFrame, SwsContext* scale) {
+    if (inputFrame) {
+      inputFrame->pict_type = AV_PICTURE_TYPE_NONE;
     }
 
     AVPacket* output_packet = av_packet_alloc();
@@ -343,25 +343,29 @@ class VideoTranscoder : public QObject {
 
     AVFrame* scaledFrame = nullptr;
 
-    if (input_frame && scale) {
-      // Some artifacts during scalling TODO FIX
+    if (inputFrame && scale) {
+      scaledFrame = av_frame_alloc();
+      scaledFrame->format = inputFrame->format;
+      scaledFrame->width = Width;
+      scaledFrame->height = Height;
+      // scaledFrame->channels = inputFrame->channels;
+      // scaledFrame->channel_layout = inputFrame->channel_layout;
+      scaledFrame->nb_samples = inputFrame->nb_samples;
+      av_frame_get_buffer(scaledFrame, 32);
+      av_frame_copy_props(scaledFrame, inputFrame);
 
-      // scaledFrame = av_frame_alloc();
-      // scaledFrame->pict_type = input_frame->pict_type;
-      // const auto pixFormat = static_cast<AVPixelFormat>(input_frame->format);
-      // auto* out_buffer = (unsigned char*)av_malloc(
-      //     av_image_get_buffer_size(pixFormat, Width, Height, 1));
-      // av_image_fill_arrays(scaledFrame->data, scaledFrame->linesize,
-      // out_buffer,
-      //                      pixFormat, Width, Height, 1);
+      const auto pixFormat = static_cast<AVPixelFormat>(inputFrame->format);
+      auto* out_buffer = static_cast<std::uint8_t*>(
+          av_malloc(av_image_get_buffer_size(pixFormat, Width, Height, 32)));
+      av_image_fill_arrays(scaledFrame->data, scaledFrame->linesize, out_buffer,
+                           pixFormat, Width, Height, 32);
 
-      sws_scale(scale, input_frame->data, input_frame->linesize, 0,
-                _decoder->codecContext->height, input_frame->data,
-                input_frame->linesize);
+      sws_scale(scale, inputFrame->data, inputFrame->linesize, 0,
+                _decoder->codecContext->height, scaledFrame->data,
+                scaledFrame->linesize);
     }
 
-    int response = avcodec_send_frame(_encoder->codecContext, input_frame);
-
+    int response = avcodec_send_frame(_encoder->codecContext, scaledFrame);
     while (response >= 0) {
       response = avcodec_receive_packet(_encoder->codecContext, output_packet);
       if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
@@ -453,8 +457,8 @@ int ToWebmConvertor::convert(VideoProp input, QString output) {
     transcoder.process(input);
   } catch (std::exception& ex) {
     qDebug() << ex.what();
+    emit updateProgress(input.uuid, -1);
     return -1;
-    emit updateProgress(input.uuid, 0);
   }
 
   return 0;
