@@ -3,6 +3,8 @@ set(FFmmpeg_PATH "D:/Libs/FFmpeg")
 set(FFmmpeg_INCLUDE "${FFmmpeg_PATH}/include")
 set(FFmmpeg_LIB "${FFmmpeg_PATH}/bin")
 
+set(app_icon_resource_windows "${CMAKE_CURRENT_SOURCE_DIR}/Resources/AppIcon/Resource.rc")
+
 project(TgCreateEmoji VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -49,8 +51,12 @@ find_library(AVFORMAT_LIBRARY PATHS ${FFmmpeg_LIB} NAMES avformat)
 find_library(AVUTIL_LIBRARY PATHS ${FFmmpeg_LIB} NAMES avutil)
 find_library(AVDEVICE_LIBRARY PATHS ${FFmmpeg_LIB} NAMES avdevice)
 
-add_executable(TgGifToEmoji ${PROJECT_SOURCES} resources.qrc)
-target_include_directories(TgGifToEmoji PRIVATE "src")
-target_include_directories(TgGifToEmoji PRIVATE ${FFmmpeg_INCLUDE})
-target_link_libraries(TgGifToEmoji PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
-target_link_libraries(TgGifToEmoji PRIVATE ${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVUTIL_LIBRARY} ${AVDEVICE_LIBRARY} ${SWSCALE_LIBRARY})
+add_executable(TgCreateEmoji ${PROJECT_SOURCES} resources.qrc ${app_icon_resource_windows})
+target_include_directories(TgCreateEmoji PRIVATE "src")
+target_include_directories(TgCreateEmoji PRIVATE ${FFmmpeg_INCLUDE})
+target_link_libraries(TgCreateEmoji PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(TgCreateEmoji PRIVATE ${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVUTIL_LIBRARY} ${AVDEVICE_LIBRARY} ${SWSCALE_LIBRARY})
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set_property(TARGET TgCreateEmoji PROPERTY WIN32_EXECUTABLE true)
+endif()

@@ -55,11 +55,13 @@ bool ConvertItemListModel::setData(const QModelIndex& index,
 }
 
 bool ConvertItemListModel::removeRows(int row, int count, const QModelIndex&) {
-  for (int i = row; i < count; ++i) {
+  const auto toRemove =
+      std::min(static_cast<size_t>(count - row), items.size());
+  for (int i = row; i < toRemove; ++i) {
     items.erace(row);
   }
 
-  emit dataChanged(index(row), index(count));
+  emit dataChanged(index(row), index(toRemove));
   return true;
 }
 

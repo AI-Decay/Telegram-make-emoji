@@ -32,13 +32,14 @@ constexpr auto ConvertButtonText = "Convert";
 constexpr auto SelectPathButtonText = "Select output path";
 constexpr auto OutPathLabelObjectName = "OutPathLabel";
 constexpr auto Organization = "AiDecay";
-constexpr auto Application = "TgGifToEmoji";
+constexpr auto Application = "TgCreateEmoji";
 constexpr auto OutputPathKey = "OutputPath";
+constexpr auto WindowIcon = ":/images/Resources/AppIcon/icon.ico";
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setStyleSheet(loadStyleSheet(WindowStyle));
-  ;
+  setWindowIcon(QIcon(WindowIcon));
   const auto outputPath =
       QSettings(Organization, Application)
           .value(OutputPathKey, QStandardPaths::writableLocation(
