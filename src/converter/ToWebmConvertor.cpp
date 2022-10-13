@@ -341,18 +341,18 @@ class VideoTranscoder : public QObject {
       throw std::exception(AllocateAVPacketException);
     }
 
-    AVFrame* scaledFrame = nullptr;
+    AVFramePtr scaledFrame = nullptr;
 
     if (inputFrame && scale) {
-      scaledFrame = av_frame_alloc();
+      scaledFrame = AVFramePtr(av_frame_alloc());
       scaledFrame->format = inputFrame->format;
       scaledFrame->width = Width;
       scaledFrame->height = Height;
       // scaledFrame->channels = inputFrame->channels;
       // scaledFrame->channel_layout = inputFrame->channel_layout;
       scaledFrame->nb_samples = inputFrame->nb_samples;
-      av_frame_get_buffer(scaledFrame, 32);
-      av_frame_copy_props(scaledFrame, inputFrame);
+      av_frame_get_buffer(scaledFrame.get(), 32);
+      av_frame_copy_props(scaledFrame.get(), inputFrame);
 
       const auto pixFormat = static_cast<AVPixelFormat>(inputFrame->format);
       auto* out_buffer = static_cast<std::uint8_t*>(
@@ -365,7 +365,8 @@ class VideoTranscoder : public QObject {
                 scaledFrame->linesize);
     }
 
-    int response = avcodec_send_frame(_encoder->codecContext, scaledFrame);
+    int response =
+        avcodec_send_frame(_encoder->codecContext, scaledFrame.get());
     while (response >= 0) {
       response = avcodec_receive_packet(_encoder->codecContext, output_packet);
       if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
