@@ -16,8 +16,8 @@ class MainWindow : public QMainWindow {
   QSize sizeHint() const override;
 
  private:
-  QListView* files;
-  ToWebmConvertor* convertor;
+  QListView* files = nullptr;
+  ToWebmConvertor* convertor = nullptr;
   QHash<QUuid, bool> session;
 };
 #endif  // MAINWINDOW_H

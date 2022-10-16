@@ -168,11 +168,14 @@ class VideoTranscoder : public QObject {
 
     auto** streams = _decoder->formatContext->streams;
 
-    _fps = static_cast<double>(
-               streams[inputPacket->stream_index]->avg_frame_rate.num) /
-           streams[inputPacket->stream_index]->avg_frame_rate.den;
-    const int64_t beginFrame = input.beginPosMs * _fps / 1000;
-    const int64_t endFrame = input.endPosMs * _fps / 1000;
+    _fps = streams[inputPacket->stream_index]->avg_frame_rate;
+
+    //   static_cast<double>(
+    // //     streams[inputPacket->stream_index]->avg_frame_rate.num) /
+    // streams[inputPacket->stream_index]->avg_frame_rate.den;
+
+    const int64_t beginFrame = input.beginPosMs * _fps.num / (1000 * _fps.den);
+    const int64_t endFrame = input.endPosMs * _fps.num / (1000 * _fps.den);
     const int64_t totalFrames = endFrame - beginFrame;
 
     int64_t count = 0;
@@ -375,7 +378,8 @@ class VideoTranscoder : public QObject {
         throw std::exception(ReceivingPacketDecoderException);
       }
 
-      const auto frameDuration = _decoder->stream->time_base.den / _fps;
+      const auto frameDuration =
+          _decoder->stream->time_base.den * _fps.den / _fps.num;
       const int64_t frameTime = current_frame * frameDuration;
       output_packet->pts = frameTime / _decoder->stream->time_base.num;
       output_packet->duration = frameDuration;
@@ -423,7 +427,7 @@ class VideoTranscoder : public QObject {
   ContextPtr _encoder = nullptr;
   ContextPtr _decoder = nullptr;
   size_t current_frame = 0;
-  double _fps = 0;
+  AVRational _fps = {};
 };
 
 }  // namespace

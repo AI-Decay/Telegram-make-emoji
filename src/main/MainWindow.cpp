@@ -148,7 +148,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             session[uuid] = true;
             const auto isAllReady =
                 std::all_of(session.begin(), session.end(),
-                            [](const auto pair) { return pair; });
+                            [](const auto isReady) { return isReady; });
             if (isAllReady) {
               model->removeRows(0, session.size());
               convertButton->setEnabled(true);
